@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 170" role="img" aria-label="Spovibe">
+  <title>Spovibe</title>
+  <desc>Logotype Spovibe en blanc</desc>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@700&amp;display=swap');
+    .wm { font-family: 'Quicksand', 'Trebuchet MS', sans-serif; font-weight: 700; fill: #ffffff; }
+  </style>
+  <text class="wm" x="280" y="120" text-anchor="middle" font-size="132" letter-spacing="-3">Spovibe</text>
+</svg>

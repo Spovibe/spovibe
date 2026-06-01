@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choisir un challenge · Spovibe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon-spovibe.svg">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="bg-ambient"></div>
+  <div id="nav"></div>
+
+  <main class="section" style="padding-top:48px;">
+    <div class="container">
+      <div class="center" style="margin-bottom:30px;">
+        <span class="eyebrow">Étape 1 · Choisissez votre vertical</span>
+        <h2 style="margin-top:16px;">Sur quel marché veux-tu prouver ta gestion&nbsp;?</h2>
+        <p class="lead center" style="margin:14px auto 0;">Spovibe finance les parieurs sur deux marchés distincts. Choisis le tien — tu peux toujours ajouter l'autre plus tard.</p>
+      </div>
+
+      <!-- Sélecteur de vertical -->
+      <div style="display:flex;justify-content:center;margin-bottom:36px;">
+        <div class="seg" id="verticalSeg" style="padding:6px;">
+          <button data-v="sports" class="active" style="display:inline-flex;align-items:center;gap:7px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7l4.7 3.4-1.8 5.5h-5.8l-1.8-5.5z"/></svg>Sports</button>
+          <button data-v="predictions" style="display:inline-flex;align-items:center;gap:7px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M17 6h4v4"/></svg>Prédictions</button>
+        </div>
+      </div>
+
+      <!-- Sous-titre dynamique par vertical -->
+      <div class="center" style="margin-bottom:32px;">
+        <h3 id="vTitle" style="font-size:1.4rem;font-weight:800;letter-spacing:-0.02em;"></h3>
+        <p class="muted" id="vSub" style="margin-top:8px;max-width:640px;margin-left:auto;margin-right:auto;font-size:0.96rem;"></p>
+      </div>
+
+      <div class="price-grid" id="grid"></div>
+
+      <!-- Checkout -->
+      <div id="checkout" class="card" style="display:none;max-width:580px;margin:40px auto 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;flex-wrap:wrap;">
+          <h3 id="coTitle">Récapitulatif</h3>
+          <span class="badge eval"><span class="dot"></span> <span id="coVertical">Évaluation</span></span>
+        </div>
+        <div id="coBody"></div>
+        <div class="alert error" id="coAlert" style="margin-top:16px;"></div>
+        <button class="btn btn-primary btn-block btn-lg" id="coBtn" style="margin-top:8px;">Lancer mon évaluation</button>
+        <p class="muted center" style="font-size:0.82rem;margin-top:14px;">Prix indiqués HT — la TVA est ajoutée au paiement selon votre pays. Démonstration : aucun paiement réel n'est effectué.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="assets/app.js"></script>
+  <script>
+    document.getElementById("nav").innerHTML = SF.renderNav();
+    const checkSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>';
+
+    const COPY = {
+      sports: {
+        title: "Challenge Paris sportifs",
+        sub: "Football, tennis, basket, e-sport, hippique… Démontre ta régularité sur les marchés que tu maîtrises. 30 paris valides minimum, +35 % en 30 jours.",
+        unit: "paris",
+        unitVerb: "Paris valides minimum",
+        stakeLbl: "Mise par pari (min/max)",
+        expLbl: "Exposition max par match",
+        coVertical: "Sports",
+      },
+      predictions: {
+        title: "Challenge Marchés prédictifs",
+        sub: "Polymarket et marchés équivalents : politique, sport, tech, macro. Plus de temps par position, exposition par marché plus généreuse. 20 positions minimum, +35 % en 30 jours.",
+        unit: "positions",
+        unitVerb: "Positions valides minimum",
+        stakeLbl: "Exposition max par position",
+        expLbl: "Exposition max par marché",
+        coVertical: "Prédictions",
+      },
+    };
+
+    let current = "sports";
+    let selected = null;
+
+    function tiersForVertical(v) {
+      return v === "predictions" ? SF.TIERS_PREDICTIONS : SF.TIERS_SPORTS;
+    }
+
+    function renderGrid() {
+      const c = COPY[current];
+      document.getElementById("vTitle").textContent = c.title;
+      document.getElementById("vSub").textContent = c.sub;
+      document.getElementById("grid").innerHTML = tiersForVertical(current).map(t => `
+        <div class="tier ${t.featured ? "featured" : ""}" id="card-${t.id}">
+          ${t.featured ? '<span class="tag">★ Le plus choisi</span>' : '<span class="tag" style="color:var(--muted);background:var(--bg-2);padding:4px 10px;border-radius:99px;">'+t.name+'</span>'}
+          <div class="cap">${SF.fmt(t.capital)}</div>
+          <div class="fee">Frais uniques · <b>${SF.fmt(t.fee)} HT</b></div>
+          <ul>
+            <li>${checkSvg} Objectif : <b style="margin-left:4px">+${t.target}%</b> en ${t.timeLimitDays} jours</li>
+            <li>${checkSvg} Drawdown total : ${t.maxDD}% · journalier : ${t.maxDailyLoss}%</li>
+            <li>${checkSvg} ${c.stakeLbl} : ${t.minStakePct ? t.minStakePct + "% – " : ""}${t.maxStakePct}%</li>
+            <li>${checkSvg} ${t.minActiveDays} jours actifs · ${t.minBets} ${c.unit} min</li>
+            <li>${checkSvg} Partage : <b style="margin-left:4px;color:var(--orange)">${t.split}%</b></li>
+          </ul>
+          <button class="btn ${t.featured ? "btn-primary" : "btn-ghost"} btn-block" onclick="selectTier('${t.id}')">Sélectionner</button>
+        </div>`).join("");
+    }
+
+    function selectTier(id) {
+      selected = SF.tierById(id);
+      if (!selected) return;
+      // Si le tier appartient à l'autre vertical, on bascule l'onglet
+      if (selected.vertical !== current) {
+        current = selected.vertical;
+        document.querySelectorAll("#verticalSeg button").forEach(b => b.classList.toggle("active", b.dataset.v === current));
+        renderGrid();
+      }
+      document.querySelectorAll(".tier").forEach(c => c.style.outline = "");
+      const card = document.getElementById("card-" + id);
+      if (card) card.style.outline = "2px solid var(--orange)";
+      const c = COPY[current];
+      document.getElementById("coTitle").textContent = "Challenge " + selected.name + " · " + SF.fmt(selected.capital);
+      document.getElementById("coVertical").textContent = c.coVertical;
+      document.getElementById("coBody").innerHTML = `
+        <div class="rule-row"><span class="muted">Vertical</span><b>${c.coVertical}</b></div>
+        <div class="rule-row"><span class="muted">Capital confié</span><b>${SF.fmt(selected.capital)}</b></div>
+        <div class="rule-row"><span class="muted">Objectif de profit</span><b style="color:var(--green)">+${selected.target}% en ${selected.timeLimitDays} jours</b></div>
+        <div class="rule-row"><span class="muted">Split (compte financé)</span><b style="color:var(--orange)">${selected.split}% des gains</b></div>
+        <div class="rule-row"><span class="muted">${c.stakeLbl}</span><b>${selected.minStakePct ? selected.minStakePct + "% – " : ""}${selected.maxStakePct}% · ${selected.minStakePct ? SF.fmt(selected.capital*selected.minStakePct/100) + " – " : ""}${SF.fmt(selected.capital*selected.maxStakePct/100)}</b></div>
+        <div class="rule-row"><span class="muted">${c.expLbl}</span><b>${selected.maxExposurePct}%</b></div>
+        <div class="rule-row"><span class="muted">Drawdown journalier max</span><b>${selected.maxDailyLoss}%</b></div>
+        <div class="rule-row"><span class="muted">Drawdown total max</span><b>${selected.maxDD}% · plancher ${SF.fmt(selected.capital*(1-selected.maxDD/100))}</b></div>
+        <div class="rule-row"><span class="muted">Jours actifs minimum</span><b>${selected.minActiveDays}</b></div>
+        <div class="rule-row"><span class="muted">${c.unitVerb}</span><b>${selected.minBets}</b></div>
+        <div class="rule-row"><span class="muted">Semaines positives</span><b>${selected.positiveWeeks}/${selected.totalWeeks}</b></div>
+        <div class="rule-row" style="border-top:1px solid var(--border-strong);margin-top:6px;"><span>Frais d'évaluation</span><b style="font-size:1.2rem">${SF.fmt(selected.fee)} HT</b></div>`;
+      const co = document.getElementById("checkout");
+      co.style.display = "block";
+      co.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    window.selectTier = selectTier;
+
+    document.getElementById("coBtn").addEventListener("click", () => {
+      const alert = document.getElementById("coAlert");
+      alert.classList.remove("show");
+      if (!selected) return;
+      if (!SF.currentUser()) { location.href = "signup.html"; return; }
+      // On vérifie seulement les comptes du MÊME vertical (chaque vertical a son slot dédié)
+      const existing = SF.getAccount(selected.vertical);
+      if (existing && (existing.status === "active" || existing.status === "funded" || existing.status === "passed")) {
+        if (!confirm(`Tu as déjà un challenge ${COPY[selected.vertical].coVertical} en cours. Le remplacer effacera sa progression. Continuer ?`)) return;
+      }
+      const res = SF.startChallenge(selected.id);
+      if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+      location.href = "espace.html";
+    });
+
+    // Onglets vertical
+    document.querySelectorAll("#verticalSeg button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#verticalSeg button").forEach(b => b.classList.toggle("active", b === btn));
+        current = btn.dataset.v;
+        selected = null;
+        document.getElementById("checkout").style.display = "none";
+        renderGrid();
+      });
+    });
+
+    // Pré-sélection via ancre : #s-elite, #p-rookie, ou ?v=predictions
+    const params = new URLSearchParams(location.search);
+    const vParam = params.get("v");
+    if (vParam === "predictions" || vParam === "sports") {
+      current = vParam;
+      document.querySelectorAll("#verticalSeg button").forEach(b => b.classList.toggle("active", b.dataset.v === current));
+    }
+    renderGrid();
+    if (location.hash) {
+      const id = location.hash.slice(1);
+      if (SF.tierById(id)) selectTier(id);
+    }
+  </script>
+</body>
+</html>

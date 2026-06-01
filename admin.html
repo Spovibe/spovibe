@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin · Spovibe</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon-spovibe.svg">
+  <link rel="stylesheet" href="assets/styles.css">
+  <style>
+    /* Petite touche distincte pour signaler le mode admin */
+    .admin-pill { display: inline-flex; align-items: center; gap: 6px;
+      background: #0F0E1A; color: #fff; padding: 4px 10px; border-radius: 99px;
+      font-size: 0.66rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    .adm-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 18px 22px; box-shadow: var(--shadow-sm); }
+    .adm-stat .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+    .adm-stat .v { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; margin: 6px 0 2px; color: var(--text); font-family: var(--font); }
+    .adm-stat .s { font-size: 0.78rem; color: var(--muted); }
+    .adm-stat.featured { background: linear-gradient(135deg, var(--orange), var(--orange-2)); color: #fff; border-color: transparent; }
+    .adm-stat.featured .k, .adm-stat.featured .s { color: rgba(255,255,255,0.85); }
+    .adm-stat.featured .v { color: #fff; }
+    .adm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    @media (max-width: 1100px) { .adm-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .adm-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="bg-ambient"></div>
+  <div id="nav"></div>
+
+  <main>
+    <div class="bo">
+      <aside class="bo-side">
+        <div class="bo-who" id="boWho"></div>
+        <nav class="bo-nav" id="boNav"></nav>
+      </aside>
+      <section class="bo-main"><div id="view"></div></section>
+    </div>
+  </main>
+
+  <script src="assets/app.js"></script>
+  <script>
+    // ----- Auth admin : mot de passe simple (demo) -----
+    const ADMIN_PASS = "spovibe-admin";
+    if (sessionStorage.getItem("sf_admin") !== "ok") {
+      const p = prompt("Mot de passe admin");
+      if (p !== ADMIN_PASS) { alert("Accès refusé."); location.href = "index.html"; throw new Error("denied"); }
+      sessionStorage.setItem("sf_admin", "ok");
+    }
+
+    document.getElementById("nav").innerHTML = SF.renderNav();
+
+    // ----- Icônes -----
+    const I = {
+      dash:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      users:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+      eval:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
+      funded:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4z"/></svg>',
+      pay:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14h2"/></svg>',
+      msg:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.5 8.5 0 0 1-9 8.5L3 21l1-5a8.5 8.5 0 1 1 17-4.5z"/></svg>',
+      group:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="16" cy="10" r="2.5"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M14 13h3a3 3 0 0 1 3 3v2"/></svg>',
+    };
+    const SECTIONS = [
+      ["dashboard", "Vue d'ensemble", I.dash],
+      ["users", "Utilisateurs", I.users],
+      ["evals", "Évaluations en cours", I.eval],
+      ["funded", "Comptes financés", I.funded],
+      ["payments", "Revenue & retraits", I.pay],
+      ["messages", "Messages contact", I.msg],
+      ["communities", "Communautés", I.group],
+    ];
+    const TITLES = {
+      dashboard: ["Vue d'ensemble", "KPI globaux du système Spovibe"],
+      users: ["Utilisateurs", "Tous les comptes enregistrés"],
+      evals: ["Évaluations en cours", "Challenges actifs en phase d'évaluation"],
+      funded: ["Comptes financés", "Traders en phase funded avec leur P&L"],
+      payments: ["Revenue & retraits", "Encaissements de challenges et payouts versés"],
+      messages: ["Messages contact", "Demandes reçues via le formulaire"],
+      communities: ["Communautés", "Communautés de créateurs"],
+    };
+
+    // ----- Vues -----
+    function fmt(n) { return SF.fmt(n); }
+    function fmt2(n) { return SF.fmt2(n); }
+    function fmtDate(ts) { return SF.fmtDate(ts); }
+    function vertLabel(v) { return v === "predictions" ? "Prédictions" : "Sports"; }
+    function statusBadge(a) {
+      if (a.phase === "funded") return '<span style="background:var(--green-soft);color:var(--green);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Financé</span>';
+      if (a.status === "passed") return '<span style="background:var(--orange-soft);color:var(--orange);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Réussi · à activer</span>';
+      if (a.status === "failed") return '<span style="background:var(--red-soft);color:var(--red);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Échoué</span>';
+      return '<span style="background:rgba(15,14,26,0.06);color:var(--muted);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">En évaluation</span>';
+    }
+
+    function viewDashboard() {
+      const k = SF.adminKpis();
+      const recentUsers = SF.adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 6);
+      const recentPays = SF.adminPayments().slice(0, 8);
+      return `
+        <div class="adm-grid">
+          <div class="adm-stat featured"><div class="k">Revenue total</div><div class="v">${fmt(k.revenue)}</div><div class="s">+${fmt(k.revenueMonth)} ce mois</div></div>
+          <div class="adm-stat"><div class="k">Utilisateurs</div><div class="v">${k.usersTotal}</div><div class="s">+${k.usersMonth} ce mois</div></div>
+          <div class="adm-stat"><div class="k">Évaluations actives</div><div class="v">${k.challengesActive}</div><div class="s">${k.challengesPassed} réussies · ${k.challengesFailed} échouées</div></div>
+          <div class="adm-stat"><div class="k">Comptes financés</div><div class="v" style="color:var(--green)">${k.fundedActive}</div><div class="s">Actifs</div></div>
+          <div class="adm-stat"><div class="k">Payouts versés</div><div class="v">${fmt(k.payoutsTotal)}</div><div class="s">+${fmt(k.payoutsMonth)} ce mois</div></div>
+          <div class="adm-stat"><div class="k">Marge brute</div><div class="v">${fmt(k.revenue - k.payoutsTotal)}</div><div class="s">Revenue moins payouts</div></div>
+          <div class="adm-stat"><div class="k">Messages contact</div><div class="v">${k.messagesOpen}</div><div class="s">À traiter</div></div>
+          <div class="adm-stat"><div class="k">Communautés</div><div class="v">${SF.adminCommunitiesList().length}</div><div class="s">Créateurs actifs</div></div>
+        </div>
+
+        <div class="dash-grid" style="margin-top:22px;">
+          <div class="card">
+            <h3 style="margin-bottom:12px;">Derniers inscrits</h3>
+            ${recentUsers.length ? `<div style="overflow-x:auto;"><table class="history" style="min-width:100%;"><thead><tr><th>Utilisateur</th><th>Email</th><th>Inscrit le</th></tr></thead><tbody>
+              ${recentUsers.map(u => `<tr><td><b>${SF.escapeHtml(u.name)}</b></td><td class="muted">${SF.escapeHtml(u.email)}</td><td class="muted">${u.created ? fmtDate(u.created) : '—'}</td></tr>`).join("")}
+            </tbody></table></div>` : '<p class="muted">Aucun utilisateur pour le moment.</p>'}
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom:12px;">Activité récente</h3>
+            ${recentPays.length ? `<div style="overflow-x:auto;"><table class="history" style="min-width:100%;"><thead><tr><th>Date</th><th>Utilisateur</th><th>Type</th><th>Montant</th></tr></thead><tbody>
+              ${recentPays.map(p => `<tr><td class="muted">${fmtDate(p.at)}</td><td><b>${SF.escapeHtml(p._name)}</b></td><td>${p.type}</td><td class="${p.dir === 'in' ? 'pos' : ''}">${p.dir === 'in' ? '+' : '−'}${fmt2(p.amount)}</td></tr>`).join("")}
+            </tbody></table></div>` : '<p class="muted">Aucune transaction.</p>'}
+          </div>
+        </div>`;
+    }
+
+    function viewUsers() {
+      const users = SF.adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0));
+      const accountsByEmail = {};
+      SF.adminAccounts().forEach(a => {
+        if (!accountsByEmail[a._email]) accountsByEmail[a._email] = [];
+        accountsByEmail[a._email].push(a);
+      });
+      if (!users.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucun utilisateur.</p></div>';
+      return `<div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:780px;">
+        <thead><tr><th>Nom</th><th>Email</th><th>Inscrit le</th><th>Comptes</th><th>Statut</th></tr></thead>
+        <tbody>${users.map(u => {
+          const accs = accountsByEmail[u.email] || [];
+          const summary = accs.length ? accs.map(a => `${vertLabel(a.vertical || a.tier.vertical)} ${a.tier.name}`).join(", ") : '—';
+          const status = accs.length ? statusBadge(accs[0]) : '<span class="muted" style="font-size:0.78rem;">Aucun challenge</span>';
+          return `<tr><td><b>${SF.escapeHtml(u.name)}</b></td><td class="muted">${SF.escapeHtml(u.email)}</td><td class="muted">${u.created ? fmtDate(u.created) : '—'}</td><td>${SF.escapeHtml(summary)}</td><td>${status}</td></tr>`;
+        }).join("")}</tbody></table></div>
+        <p class="muted" style="font-size:0.84rem;margin-top:12px;">Total : <b>${users.length}</b> utilisateur${users.length > 1 ? 's' : ''}.</p>`;
+    }
+
+    function viewEvals() {
+      const accs = SF.adminAccounts().filter(a => a.status === "active" && a.phase === "evaluation");
+      if (!accs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucune évaluation en cours.</p></div>';
+      return `<div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:820px;">
+        <thead><tr><th>Utilisateur</th><th>Vertical</th><th>Palier</th><th>Profit</th><th>Drawdown</th><th>Jours actifs</th><th>${'Paris/Positions'}</th><th>Statut</th></tr></thead>
+        <tbody>${accs.map(a => {
+          const s = SF.stats(a);
+          const v = a.vertical || a.tier.vertical || "sports";
+          return `<tr>
+            <td class="muted">${SF.escapeHtml(a._email)}</td>
+            <td>${vertLabel(v)}</td>
+            <td><b>${SF.escapeHtml(a.tier.name)}</b> · ${fmt(a.capital)}</td>
+            <td class="${s.profit >= 0 ? 'pos' : 'neg'}">${s.profit >= 0 ? '+' : ''}${fmt2(s.profit)} (${s.profit >= 0 ? '+' : ''}${s.profitPct}%)</td>
+            <td>${Math.round(s.ddUsedPct)}% / ${a.tier.maxDD}%</td>
+            <td>${s.activeDays} / ${a.tier.minActiveDays}</td>
+            <td>${s.bets} / ${a.tier.minBets}</td>
+            <td>${statusBadge(a)}</td>
+          </tr>`;
+        }).join("")}</tbody></table></div>
+        <p class="muted" style="font-size:0.84rem;margin-top:12px;">Total : <b>${accs.length}</b> challenge${accs.length > 1 ? 's' : ''} actif${accs.length > 1 ? 's' : ''}.</p>`;
+    }
+
+    function viewFunded() {
+      const accs = SF.adminAccounts().filter(a => a.phase === "funded");
+      if (!accs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucun compte financé pour le moment.</p></div>';
+      const totalProfit = accs.reduce((sum, a) => sum + (a.balance - a.capital), 0);
+      const totalWithdrawn = accs.reduce((sum, a) => sum + (a.withdrawn || 0), 0);
+      return `<div class="adm-grid" style="margin-bottom:18px;grid-template-columns:repeat(3,1fr);">
+          <div class="adm-stat featured"><div class="k">Comptes financés</div><div class="v">${accs.length}</div></div>
+          <div class="adm-stat"><div class="k">Profit cumulé en cours</div><div class="v ${totalProfit >= 0 ? 'pos' : 'neg'}">${totalProfit >= 0 ? '+' : ''}${fmt2(totalProfit)}</div></div>
+          <div class="adm-stat"><div class="k">Total retiré</div><div class="v">${fmt(totalWithdrawn)}</div></div>
+        </div>
+        <div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:820px;">
+        <thead><tr><th>Utilisateur</th><th>Vertical</th><th>Palier</th><th>Solde actuel</th><th>Profit cycle</th><th>Total retiré</th><th>Activé le</th></tr></thead>
+        <tbody>${accs.map(a => {
+          const v = a.vertical || a.tier.vertical || "sports";
+          const profit = a.balance - a.capital;
+          return `<tr>
+            <td class="muted">${SF.escapeHtml(a._email)}</td>
+            <td>${vertLabel(v)}</td>
+            <td><b>${SF.escapeHtml(a.tier.name)}</b> · ${fmt(a.capital)}</td>
+            <td>${fmt2(a.balance)}</td>
+            <td class="${profit >= 0 ? 'pos' : 'neg'}">${profit >= 0 ? '+' : ''}${fmt2(profit)}</td>
+            <td>${fmt2(a.withdrawn || 0)}</td>
+            <td class="muted">${a.fundedAt ? fmtDate(a.fundedAt) : '—'}</td>
+          </tr>`;
+        }).join("")}</tbody></table></div>`;
+    }
+
+    function viewPayments() {
+      const pays = SF.adminPayments();
+      const revenue = pays.filter(p => p.dir === "out" && p.type === "Challenge").reduce((s, p) => s + p.amount, 0);
+      const payouts = pays.filter(p => p.dir === "in" && p.type === "Retrait").reduce((s, p) => s + p.amount, 0);
+      const margin = revenue - payouts;
+      return `<div class="adm-grid" style="margin-bottom:18px;grid-template-columns:repeat(3,1fr);">
+          <div class="adm-stat featured"><div class="k">Revenue total</div><div class="v">${fmt(revenue)}</div></div>
+          <div class="adm-stat"><div class="k">Payouts versés</div><div class="v" style="color:var(--green)">${fmt(payouts)}</div></div>
+          <div class="adm-stat"><div class="k">Marge brute</div><div class="v ${margin >= 0 ? 'pos' : 'neg'}">${fmt(margin)}</div></div>
+        </div>
+        <div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:780px;">
+        <thead><tr><th>Date</th><th>Utilisateur</th><th>Type</th><th>Détail</th><th>Sens</th><th>Montant</th></tr></thead>
+        <tbody>${pays.length ? pays.map(p => `<tr>
+          <td class="muted">${fmtDate(p.at)}</td>
+          <td><b>${SF.escapeHtml(p._name)}</b><br><span class="muted" style="font-size:0.78rem;">${SF.escapeHtml(p._email)}</span></td>
+          <td>${p.type}</td>
+          <td>${SF.escapeHtml(p.label)}</td>
+          <td>${p.dir === 'in' ? '<span class="neg">Payé au trader</span>' : '<span class="pos">Encaissé</span>'}</td>
+          <td class="${p.dir === 'out' ? 'pos' : 'neg'}">${p.dir === 'out' ? '+' : '−'}${fmt2(p.amount)}</td>
+        </tr>`).join("") : '<tr><td colspan="6" class="empty">Aucune transaction.</td></tr>'}</tbody></table></div>`;
+    }
+
+    function viewMessages() {
+      const msgs = SF.adminContacts();
+      if (!msgs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucun message reçu.</p></div>';
+      return `<div style="display:flex;flex-direction:column;gap:12px;">${msgs.map(m => `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
+          <div><b>${SF.escapeHtml(m.name)}</b><span class="muted" style="margin-left:8px;font-size:0.86rem;">${SF.escapeHtml(m.email)}</span></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="background:var(--orange-soft);color:var(--orange);padding:4px 10px;border-radius:99px;font-size:0.74rem;font-weight:700;">${SF.escapeHtml(m.subject || 'Général')}</span>
+            <span class="muted" style="font-size:0.78rem;">${fmtDate(m.at)}</span>
+          </div>
+        </div>
+        <p style="margin:0;white-space:pre-wrap;">${SF.escapeHtml(m.message)}</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          <a class="btn btn-primary btn-sm" href="mailto:${encodeURIComponent(m.email)}?subject=${encodeURIComponent('Re: ' + (m.subject || 'votre demande'))}">Répondre</a>
+        </div>
+      </div>`).join("")}</div>
+      <p class="muted" style="font-size:0.84rem;margin-top:14px;">Total : <b>${msgs.length}</b> message${msgs.length > 1 ? 's' : ''}.</p>`;
+    }
+
+    function viewCommunities() {
+      const list = SF.adminCommunitiesList();
+      if (!list.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucune communauté créée pour le moment.</p></div>';
+      return `<div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:680px;">
+        <thead><tr><th>Code</th><th>Nom</th><th>Créateur</th><th>Membres</th><th>Messages</th></tr></thead>
+        <tbody>${list.map(c => `<tr>
+          <td><code style="background:var(--bg-2);padding:3px 8px;border-radius:6px;font-size:0.84rem;">${SF.escapeHtml(c.code)}</code></td>
+          <td><b>${SF.escapeHtml(c.name)}</b></td>
+          <td class="muted">${SF.escapeHtml(c.creator)}</td>
+          <td>${(c.members || []).length + 1}</td>
+          <td>${(c.messages || []).length}</td>
+        </tr>`).join("")}</tbody></table></div>`;
+    }
+
+    const VIEWS = { dashboard: viewDashboard, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
+
+    function current() { const h = (location.hash || "#dashboard").slice(1); return VIEWS[h] ? h : "dashboard"; }
+    function go(sec) { location.hash = sec; }
+    window.go = go;
+    function renderSidebar() {
+      const cur = current();
+      document.getElementById("boWho").innerHTML = `<div class="nm">Admin Console</div><div class="em">Spovibe</div><div style="margin-top:10px;"><span class="admin-pill">● Admin</span></div>`;
+      document.getElementById("boNav").innerHTML = SECTIONS.map(item => {
+        const [id, label, icon] = item;
+        return `<button class="bo-link ${id === cur ? 'active' : ''}" onclick="go('${id}')">${icon}<span>${label}</span></button>`;
+      }).join("");
+    }
+    function render() {
+      const cur = current(), tt = TITLES[cur];
+      const head = `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="render()">Actualiser</button><button class="pill-sel ghost" onclick="sessionStorage.removeItem('sf_admin');location.reload();">Se déconnecter</button></div></div>`;
+      document.getElementById("view").innerHTML = head + VIEWS[cur]();
+      renderSidebar();
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    window.addEventListener("hashchange", render);
+    render();
+  </script>
+</body>
+</html>

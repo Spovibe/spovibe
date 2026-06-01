@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace membre · Spovibe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon-spovibe.svg">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="bg-ambient"></div>
+  <div id="nav"></div>
+
+  <main>
+    <div class="bo">
+      <aside class="bo-side">
+        <div class="bo-who" id="boWho"></div>
+        <div class="bo-search">
+          <span class="si"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <input id="boSearchInput" type="search" placeholder="Rechercher…" autocomplete="off">
+          <kbd>⌘K</kbd>
+        </div>
+        <nav class="bo-nav" id="boNav"></nav>
+        <div class="bo-up">
+          <h4>Booster ton compte</h4>
+          <p>Lance un palier supérieur pour piloter jusqu'à 100 000 €.</p>
+          <a class="btn btn-primary btn-sm" href="challenges.html">Passer Pro</a>
+        </div>
+      </aside>
+      <section class="bo-main"><div id="view"></div></section>
+    </div>
+  </main>
+
+  <script src="assets/app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="assets/certificate.js" defer></script>
+  <script>
+    document.getElementById("nav").innerHTML = SF.renderNav();
+    if (!SF.requireAuth()) { /* redirige vers login */ }
+
+    /* ---------- Icônes ---------- */
+    const I = {
+      grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
+      trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4zM6 6H4v1a3 3 0 0 0 3 3M18 6h2v1a3 3 0 0 1-3 3"/></svg>',
+      gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8S10 3 7 4s1 4 5 4M12 8s2-5 5-4-1 4-5 4"/></svg>',
+      users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+      wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14h2"/></svg>',
+      gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.3 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg>',
+      ball: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7l4.7 3.4-1.8 5.5h-5.8l-1.8-5.5z"/></svg>',
+      chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+      cert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg>',
+    };
+    /* Icônes inline « inline-with-text » pour remplacer les emojis dans les chips/labels */
+    const ICN_SPORT  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" style="vertical-align:-2px;flex-shrink:0;"><circle cx="12" cy="12" r="9"/><path d="M12 7l4.7 3.4-1.8 5.5h-5.8l-1.8-5.5z"/></svg>';
+    const ICN_CHART  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;flex-shrink:0;"><path d="M3 17l6-6 4 4 8-9"/><path d="M17 6h4v4"/></svg>';
+    const ICN_TROPHY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" style="vertical-align:-2px;flex-shrink:0;"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4zM6 6H4v1a3 3 0 0 0 3 3M18 6h2v1a3 3 0 0 1-3 3"/></svg>';
+    const ICN_USERS  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" style="vertical-align:-2px;flex-shrink:0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+    const SECTIONS = [
+      ["overview", "Vue d'ensemble", I.grid],
+      ["challenges", "Mes challenges", I.target],
+      ["betting", "Paris sportifs", I.ball],
+      ["predictions", "Marchés prédictifs", I.chart],
+      ["arena", "Arena", I.trophy],
+      ["__sect", "FEATURES"],
+      ["certificates", "Mes certificats", I.cert],
+      ["rewards", "Récompenses", I.gift],
+      ["community", "Communauté", I.users],
+      ["profile", "Profil & paiements", I.wallet],
+      ["settings", "Paramètres", I.gear],
+    ];
+    const TITLES = {
+      overview: ["Vue d'ensemble", "Tout ton espace Spovibe en un coup d'œil"],
+      challenges: ["Mes challenges", "Suis ton évaluation et ton compte financé"],
+      betting: ["Paris sportifs", "Place tes paris avec la bankroll de ton challenge"],
+      predictions: ["Marchés prédictifs", "Achète des positions YES/NO sur les grands marchés Polymarket"],
+      arena: ["Arena", "Ton classement de poule et ta division"],
+      certificates: ["Mes certificats", "Téléchargez vos preuves de réussite et de paiement"],
+      rewards: ["Récompenses & codes", "Crédits, codes promo et parrainage"],
+      community: ["Communauté", "Discussion réservée aux créateurs et à leur communauté"],
+      profile: ["Profil & paiements", "Tes informations et ton historique"],
+      settings: ["Paramètres", "Sécurité et préférences"],
+    };
+
+    /* ---------- Vue d'ensemble ---------- */
+    // Jauge circulaire SVG (gradient orange)
+    function ring(pct, val, label) {
+      pct = Math.max(0, Math.min(1, pct || 0));
+      const r = 50, c = 2 * Math.PI * r, off = c * (1 - pct);
+      return `<div class="ring-wrap"><svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+        <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="rgba(255,255,255,0.78)"/></linearGradient></defs>
+        <circle cx="60" cy="60" r="${r}" stroke="rgba(255,255,255,0.22)" stroke-width="10" fill="none"/>
+        <circle cx="60" cy="60" r="${r}" stroke="url(#rg)" stroke-width="10" fill="none" stroke-linecap="round"
+          stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" transform="rotate(-90 60 60)"/>
+      </svg><div class="ring-c"><div class="v">${val}</div><div class="l">${label}</div></div></div>`;
+    }
+
+    function viewOverview() {
+      const u = SF.currentUser();
+      const sAcc = SF.sportsAccount(), pAcc = SF.predictionsAccount();
+      const allAccs = SF.activeAccounts();
+      const combo = SF.combinedStats();
+      const r = SF.getRewards(), c = SF.myCommunity(), p = SF.poule();
+      // Compte « principal » utilisé pour les sections qui doivent en pointer un (heuristique : celui le plus avancé)
+      const acc = sAcc || pAcc;
+      const s = acc ? SF.stats(acc) : null;
+      const hour = new Date().getHours();
+      const greet = hour < 6 ? "Bonne nuit" : hour < 12 ? "Bonjour" : hour < 18 ? "Bonsoir" : "Bonsoir";
+      const firstName = (u.name || "").split(" ")[0] || u.name;
+
+      // Hero card — version multi-vertical
+      let hero;
+      if (allAccs.length) {
+        const headlinePctG = combo.capital ? (combo.profit / (combo.capital * 0.35)) : 0;
+        const profitTxt = (combo.profit >= 0 ? "+" : "") + SF.fmt2(combo.profit);
+        const vChips = allAccs.map(a => {
+          const v = a.vertical || a.tier.vertical || "sports";
+          return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.25);border-radius:99px;font-size:0.74rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${v === "predictions" ? ICN_CHART : ICN_SPORT} ${vertLabel(v)} · ${a.tier.name}</span>`;
+        }).join("");
+        hero = `<div class="hero-bo">
+          <div style="flex:1;min-width:0;">
+            <div class="h-tag">${allAccs.length === 2 ? "Multi-edge actif" : "Ton challenge"}</div>
+            <h2>Profit cumulé <span style="color:#fff;">+35 %</span> visé</h2>
+            <div class="h-amt ${combo.profit >= 0 ? 'pos' : 'neg'}">${profitTxt}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${vChips}</div>
+            <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" onclick="go('challenges')">Voir mes challenges</button>
+              ${sAcc ? `<button class="btn btn-ghost btn-sm" onclick="go('betting')">Paris sportifs</button>` : ''}
+              ${pAcc ? `<button class="btn btn-ghost btn-sm" onclick="go('predictions')">Prédictions</button>` : ''}
+            </div>
+          </div>
+          <div class="h-side">${ring(headlinePctG, (combo.profitPct >= 0 ? "+" : "") + combo.profitPct + "%", "Vers +35 %")}</div>
+        </div>`;
+      } else {
+        hero = `<div class="hero-bo">
+          <div style="flex:1;">
+            <div class="h-tag">Bienvenue, ${SF.escapeHtml(firstName)}</div>
+            <h2>Décroche un <span style="color:#fff;">capital pro</span></h2>
+            <p style="color:rgba(255,255,255,0.85);margin:8px 0 14px;">Choisis ta vertical — Sports ou Prédictions — et lance ton évaluation pour viser un compte financé jusqu'à 100 000 €.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a class="btn btn-primary btn-sm" href="challenges.html?v=sports">${ICN_SPORT} Challenge Sports</a>
+              <a class="btn btn-ghost btn-sm" href="challenges.html?v=predictions">${ICN_CHART} Challenge Prédictions</a>
+            </div>
+          </div>
+          <div class="h-side">${ring(0, "0%", "Démarre")}</div>
+        </div>`;
+      }
+
+      // Quick action cards
+      const nPend = acc && acc.pending ? acc.pending.length : 0;
+      const qCards = `<div class="q-grid">
+        <div class="q-card" onclick="go('betting')">
+          <div class="q-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7l4.7 3.4-1.8 5.5h-5.8l-1.8-5.5z"/></svg></div>
+          <h4>Paris sportifs</h4>
+          <p>${nPend ? nPend + " pari(s) en cours" : "Place ton prochain prono"}</p>
+        </div>
+        <div class="q-card" onclick="go('arena')">
+          <div class="q-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4zM6 6H4v1a3 3 0 0 0 3 3M18 6h2v1a3 3 0 0 1-3 3"/></svg></div>
+          <h4>Arena · ${p.divName}</h4>
+          <p>Rang ${p.me.rank}/${p.total}${p.me.rank <= p.promoMax ? " · zone de montée" : p.me.rank >= p.relegMin ? " · zone de descente" : ""}</p>
+        </div>
+        <div class="q-card" onclick="go('rewards')">
+          <div class="q-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/></svg></div>
+          <h4>Récompenses</h4>
+          <p>${r.credits} € de crédits · ${r.codes.length} code(s)</p>
+        </div>
+      </div>`;
+
+      // Activité récente
+      const activity = acc && acc.bets.length ? acc.bets.slice(0, 5) : [];
+      const actHtml = activity.length ? `<div class="card" style="margin-top:18px;">
+        <h3 style="font-size:1.05rem;margin-bottom:6px;">Activité récente</h3>
+        ${activity.map(b => `<div class="act-row"><div class="ic ${b.result === 'win' ? 'win' : 'lose'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${b.result === 'win' ? '<path d="M20 6L9 17l-5-5"/>' : '<path d="M18 6L6 18M6 6l12 12"/>'}</svg></div><div class="lbl"><b>${SF.escapeHtml(b.event)}</b><span>${SF.fmtDate(b.date)} · cote ${b.odds.toFixed(2)}</span></div><div class="amt ${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</div></div>`).join("")}
+      </div>` : `<div class="card" style="margin-top:18px;"><h3 style="font-size:1.05rem;margin-bottom:6px;">Activité récente</h3><p class="muted" style="font-size:0.9rem;">Aucun pari encore. Lance-toi depuis « Paris sportifs ».</p></div>`;
+
+      // Rail droite : ta progression + communauté
+      const headlinePct = s ? (s.profitPct / acc.tier.target) : 0;
+      const headlineVal = s ? (s.profitPct >= 0 ? "+" : "") + s.profitPct + "%" : "—";
+      const statRail = `<div class="card" style="padding:22px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="font-size:1.05rem;">Ta progression</h3><span class="muted" style="font-size:0.78rem;">Saison</span></div>
+        <div style="display:grid;place-items:center;margin:6px 0 14px;">${ring(headlinePct, headlineVal, "Objectif")}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">
+          <div><div style="font-weight:900;font-size:1.05rem;color:var(--orange)">${s ? s.bets : 0}</div><div class="muted" style="font-size:0.74rem;">Paris</div></div>
+          <div><div style="font-weight:900;font-size:1.05rem;">${s ? s.winRate : 0}%</div><div class="muted" style="font-size:0.74rem;">Win rate</div></div>
+          <div><div style="font-weight:900;font-size:1.05rem;" class="${s && s.roi >= 0 ? 'pos' : s ? 'neg' : ''}">${s ? (s.roi >= 0 ? '+' : '') + s.roi + '%' : '—'}</div><div class="muted" style="font-size:0.74rem;">ROI</div></div>
+        </div>
+      </div>`;
+
+      const commRail = (() => {
+        if (!c) return `<div class="card" style="padding:22px;margin-top:14px;">
+            <h3 style="font-size:1.05rem;margin-bottom:6px;">Communauté</h3>
+            <p class="muted" style="font-size:0.86rem;margin-bottom:14px;">Rejoins ou crée une communauté de créateur pour discuter et débloquer des récompenses.</p>
+            <button class="btn btn-ghost btn-block btn-sm" onclick="go('community')">Découvrir</button>
+          </div>`;
+        const all = [c.creator, ...c.members];
+        const shown = all.slice(0, 5);
+        const more = all.length - shown.length;
+        const palette = ['#FF7A3F', '#A04AFF', '#FF5A6E', '#FFB070', '#3FE08A'];
+        const avs = `<div class="av-stack">${shown.map((e, i) => `<div class="av-mini" style="background:${palette[i % palette.length]}">${(e[0] || '?').toUpperCase()}</div>`).join("")}${more > 0 ? `<div class="av-mini more">+${more}</div>` : ''}</div>`;
+        return `<div class="card" style="padding:22px;margin-top:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><h3 style="font-size:1.05rem;">Communauté</h3><span class="muted" style="font-size:0.78rem;">${all.length} membre${all.length > 1 ? 's' : ''}</span></div>
+          <div style="font-weight:800;font-size:1.1rem;margin-bottom:4px;">${SF.escapeHtml(c.name)}</div>
+          ${avs}
+          <p class="muted" style="font-size:0.86rem;margin-bottom:14px;">${c.messages.length} message(s) dans le fil</p>
+          <button class="btn btn-ghost btn-block btn-sm" onclick="go('community')">Ouvrir</button>
+        </div>`;
+      })();
+
+      // ====== Layout style Fintrixity (multi-vertical) ======
+      const totalBalance = allAccs.reduce((sum, a) => sum + a.balance, 0);
+      const totalCapital = allAccs.reduce((sum, a) => sum + a.capital, 0);
+      const totalProfitPctTxt = combo ? (combo.profitPct >= 0 ? '+' : '') + combo.profitPct + '%' : '';
+      const featuredCard = `<div class="sc featured">
+        <div class="sc-row">
+          <div class="sc-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14h2"/></svg></div>
+          <div class="sc-tt"><div class="sc-ttl">Solde global</div><div class="sc-sub">${allAccs.length === 2 ? 'Sports + Prédictions' : (allAccs.length === 1 ? vertLabel(allAccs[0].vertical) : 'Aucun challenge')}</div></div>
+          <div class="sc-more">⋯</div>
+        </div>
+        <div class="sc-amt">${allAccs.length ? SF.fmt2(totalBalance) : '0,00 €'}${combo ? ` <small>${totalProfitPctTxt}</small>` : ''}</div>
+        <div class="sc-link" onclick="go('challenges')"><span>Voir le détail</span><span>→</span></div>
+      </div>`;
+      const savingsCard = `<div class="sc">
+        <div class="sc-row">
+          <div class="sc-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13"/></svg></div>
+          <div class="sc-tt"><div class="sc-ttl">Crédits Spovibe</div><div class="sc-sub">Bonus & parrainage</div></div>
+          <div class="sc-more">⋯</div>
+        </div>
+        <div class="sc-amt">${r.credits} € <small>${r.codes.length} code${r.codes.length > 1 ? 's' : ''}</small></div>
+        <div class="sc-link" onclick="go('rewards')"><span>Voir mes codes</span><span>→</span></div>
+      </div>`;
+      const capitalCard = `<div class="sc">
+        <div class="sc-row">
+          <div class="sc-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div>
+          <div class="sc-tt"><div class="sc-ttl">Capital cumulé</div><div class="sc-sub">${allAccs.length ? allAccs.map(a => a.tier.name + ' ' + vertLabel(a.vertical)).join(' + ') : 'Aucun palier actif'}</div></div>
+          <div class="sc-more">⋯</div>
+        </div>
+        <div class="sc-amt">${allAccs.length ? SF.fmt(totalCapital) : '—'}</div>
+        <div class="sc-link" onclick="${allAccs.length ? "go('challenges')" : "location.href='challenges.html'"}"><span>${allAccs.length ? 'Voir mes challenges' : 'Choisir un palier'}</span><span>→</span></div>
+      </div>`;
+
+      // Mini-cartes wallet : un slot par vertical (toujours visible — actif ou prompt d'activation)
+      function vertWm(v) {
+        const a = v === "sports" ? sAcc : pAcc;
+        const label = vertLabel(v);
+        const status = !a ? 'Inactif' : (a.status === 'funded' ? 'Financé' : a.status === 'passed' ? 'Réussi' : a.status === 'failed' ? 'Échoué' : 'Actif');
+        return `<div class="wm">
+          <div class="wm-h"><div class="wm-n">${v === "predictions" ? ICN_CHART : ICN_SPORT} ${label}</div><div class="wm-d">⋯</div></div>
+          <div class="wm-amt">${a ? SF.fmt(a.capital) : '—'}</div>
+          <div class="wm-lim">${a ? a.tier.name + ' · +' + a.tier.target + '%' : 'Aucun challenge'}</div>
+          <div class="wm-s ${a ? '' : 'off'}">${status}</div>
+        </div>`;
+      }
+      const wmCards = `<div class="wallet-mini">
+        ${vertWm("sports")}
+        ${vertWm("predictions")}
+        <div class="wm"><div class="wm-h"><div class="wm-n">${ICN_TROPHY} Arena</div><div class="wm-d">⋯</div></div><div class="wm-amt">${p.divName}</div><div class="wm-lim">Rang ${p.me.rank}/${p.total}</div><div class="wm-s">Active</div></div>
+        <div class="wm"><div class="wm-h"><div class="wm-n">${ICN_USERS} Communauté</div><div class="wm-d">⋯</div></div><div class="wm-amt">${c ? SF.escapeHtml(c.name) : 'Solo'}</div><div class="wm-lim">${c ? (c.members.length + 1) + ' membres' : 'Aucune communauté'}</div><div class="wm-s ${c ? '' : 'off'}">${c ? 'Active' : 'Inactive'}</div></div>
+      </div>`;
+      const walletCard = `<div class="card">
+        <div class="wallet-h">
+          <div><div style="font-weight:800;font-size:1.05rem;">Mes comptes</div><div class="muted" style="font-size:0.78rem;">${new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</div></div>
+          <button class="btn btn-primary btn-sm" onclick="location.href='challenges.html'">+ Ajouter</button>
+        </div>
+        ${wmCards}
+      </div>`;
+
+      const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil'];
+      const heights = [42, 35, 95, 50, 38, 58, 30];
+      const hiIndex = Math.min(new Date().getMonth(), 6);
+      const bars = months.map((m, i) => `<div class="b-col"><div class="bar ${i === hiIndex ? 'hi' : ''}" style="height:${heights[i]}%"></div><div class="x">${m}</div></div>`).join("");
+      const totalCf = (combo ? Math.abs(combo.profit) * 12 + 50000 : 540323);
+      const chartCard = `<div class="card" style="padding:22px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><div class="muted" style="font-size:0.85rem;">Profit cumulé</div><div class="cf-amt">${SF.fmt2(totalCf)}</div></div>
+          <div class="cf-toggle"><button>Mensuel</button><button class="active">Annuel</button></div>
+        </div>
+        <div class="bars">
+          <div class="ys"><span>100k</span><span>75k</span><span>50k</span><span>25k</span><span>0</span></div>
+          ${bars}
+        </div>
+      </div>`;
+
+      // Activité agrégée des deux verticales
+      const allBets = allAccs.flatMap(a => (a.bets || []).map(b => ({ ...b, _v: a.vertical || a.tier.vertical || "sports" })));
+      allBets.sort((a, b) => b.date - a.date);
+      const recent = allBets.slice(0, 6);
+      const actTable = `<div class="card" style="padding:18px 22px;">
+        <div class="act-h">
+          <h3>Activité récente</h3>
+          <div class="right"><button class="pill-sel ghost">Rechercher</button><button class="pill-sel ghost">Filtre</button></div>
+        </div>
+        ${recent.length ? `<div style="overflow-x:auto;"><table class="history" style="min-width:620px;"><thead><tr><th>Activité</th><th>Marché</th><th>Date</th><th>Cote</th><th>Mise</th><th>P&amp;L</th><th>Statut</th></tr></thead><tbody>
+          ${recent.map(b => `<tr><td><b>${SF.escapeHtml(b.event)}</b></td><td class="muted">${b._v === "predictions" ? ICN_CHART + " Prédictions" : ICN_SPORT + " Sports"}</td><td class="muted">${SF.fmtDate(b.date)}</td><td>${b.odds.toFixed(2)}</td><td>${SF.fmt2(b.stake)}</td><td class="${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</td><td><span style="display:inline-flex;align-items:center;gap:6px;font-size:0.84rem;color:${b.result === 'win' ? 'var(--green)' : 'var(--red)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;"></span>${b.result === 'win' ? 'Gagné' : 'Perdu'}</span></td></tr>`).join("")}
+        </tbody></table></div>` : `<p class="muted" style="text-align:center;padding:20px 0;">Aucune activité pour le moment. Lance ton premier challenge pour démarrer.</p>`}
+      </div>`;
+
+      return `<div class="dash-h">
+        <div>
+          <h1>Vue d'ensemble</h1>
+          <div class="sub">${greet}, <b style="color:var(--text)">${SF.escapeHtml(firstName)}</b> — voici la synthèse de ton activité Spovibe</div>
+        </div>
+        <div class="actions">
+          <button class="pill-sel ghost">Ce mois</button>
+          <button class="pill-sel" onclick="render()">Actualiser</button>
+        </div>
+      </div>
+      <div class="stat3">${featuredCard}${savingsCard}${capitalCard}</div>
+      <div class="wc-grid">${walletCard}${chartCard}</div>
+      ${actTable}`;
+    }
+
+    /* ---------- Mes challenges (multi-vertical) ---------- */
+    function vertLabel(v) { return v === "predictions" ? "Prédictions" : "Sports"; }
+    function vertGoTo(v) { return v === "predictions" ? "predictions" : "betting"; }
+    function vertUnit(t) { return (t.unitLabel || "paris"); }
+
+    // Stats supplémentaires non couvertes par SF.stats (mise moy, cote moy, max stake, best/worst, streak)
+    function extendedStats(acc) {
+      const bets = acc.bets || [];
+      const n = bets.length;
+      if (!n) return { avgStake: 0, avgOdds: 0, maxStake: 0, bestPnl: 0, worstPnl: 0, maxStakePctTaken: 0, currentStreak: { type: "", count: 0 }, dailyPnl: {} };
+      const avgStake = bets.reduce((s, b) => s + b.stake, 0) / n;
+      const avgOdds  = bets.reduce((s, b) => s + b.odds, 0) / n;
+      const maxStake = bets.reduce((m, b) => Math.max(m, b.stake), 0);
+      const bestPnl  = bets.reduce((m, b) => Math.max(m, b.pnl), 0);
+      const worstPnl = bets.reduce((m, b) => Math.min(m, b.pnl), 0);
+      const maxStakePctTaken = (maxStake / acc.capital) * 100;
+      // bets sont rangés du plus récent au plus ancien (unshift)
+      const head = bets[0];
+      let streakCount = 0;
+      for (const b of bets) { if (b.result === head.result) streakCount++; else break; }
+      const dailyPnl = {};
+      bets.forEach(b => { dailyPnl[b.day] = (dailyPnl[b.day] || 0) + b.pnl; });
+      return { avgStake, avgOdds, maxStake, bestPnl, worstPnl, maxStakePctTaken,
+        currentStreak: { type: head.result, count: streakCount }, dailyPnl };
+    }
+    // SVG icônes condition (validée vs en cours)
+    const ICN_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg>';
+    const ICN_HOURGLASS = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M5 22h14M5 2h14M17 22v-4.5a5 5 0 0 0-3-4.5 5 5 0 0 0 3-4.5V2M7 22v-4.5a5 5 0 0 1 3-4.5 5 5 0 0 1-3-4.5V2"/></svg>';
+    function cMark(ok) { return ok ? `<span class="pos" style="display:inline-flex;align-items:center;gap:5px;">${ICN_CHECK}Validé</span>` : `<span class="muted" style="display:inline-flex;align-items:center;gap:5px;">${ICN_HOURGLASS}En cours</span>`; }
+    function dateShort(ts) { return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }); }
+
+    function renderChallengeCard(acc) {
+      const s = SF.stats(acc), t = acc.tier, pos = s.profit >= 0;
+      const ext = extendedStats(acc);
+      const v = acc.vertical || t.vertical || "sports";
+      const targetPct = Math.max(0, Math.min(100, (s.profit / (acc.capital * t.target / 100)) * 100));
+      const ddPct = Math.max(0, Math.min(100, s.ddUsedPct));
+      const unit = vertUnit(t);
+      let banner = "";
+      if (acc.status === "passed") banner = `<div class="banner win"><strong>Évaluation ${vertLabel(v)} réussie !</strong>&nbsp; Objectif +${t.target}% atteint. Active ton compte financé.</div>`;
+      else if (acc.status === "failed") banner = `<div class="banner lose"><strong>Challenge ${vertLabel(v)} terminé.</strong>&nbsp; ${SF.escapeHtml(acc.failReason || "")}</div>`;
+      else if (acc.phase === "funded") banner = `<div class="banner win"><strong>Compte ${vertLabel(v)} financé actif.</strong>&nbsp; Partage ${t.split}% en ta faveur.</div>`;
+      // Bouton certificat (visible dès que l'évaluation est validée ou le compte financé)
+      const showCert = acc.status === "passed" || acc.phase === "funded";
+      const certBtn = showCert
+        ? `<button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="openAchievementCert('${v}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg>Télécharger mon certificat</button>`
+        : "";
+      let actionCard = "";
+      if (acc.status === "passed") actionCard = `<div class="card"><h3 style="margin-bottom:8px;">Activer le compte financé</h3><p class="muted" style="font-size:0.92rem;margin-bottom:16px;">Active ton capital de ${SF.fmt(acc.capital)} (partage ${t.split}%).</p><button class="btn btn-primary btn-block btn-lg" onclick="doClaim('${v}')">Activer mon compte financé</button>${certBtn}</div>`;
+      else if (acc.status === "failed") actionCard = `<div class="card center"><h3 style="margin-bottom:10px;">Relancer</h3><a class="btn btn-primary btn-block btn-lg" href="challenges.html?v=${v}">Nouveau challenge ${vertLabel(v)}</a></div>`;
+      else { const nPend = (acc.pending || []).length; actionCard = `<div class="card"><h3 style="margin-bottom:6px;">${v === "predictions" ? "Trader des marchés" : "Parier"}</h3><p class="muted" style="font-size:0.9rem;margin-bottom:16px;">${v === "predictions" ? "Achète des positions YES/NO sur les grands marchés Polymarket." : "Place tes paris sur les matchs à venir."}${nPend ? ` Tu as <b style="color:var(--orange)">${nPend} ${unit === "positions" ? "position(s)" : "pari(s)"} en cours</b>.` : ''}</p><button class="btn btn-primary btn-block btn-lg" onclick="go('${vertGoTo(v)}')">Aller à ${vertLabel(v)}</button></div>`; }
+      let payoutCard = "";
+      if (acc.phase === "funded") {
+        const totalWithdrawn = acc.withdrawn || 0;
+        payoutCard = `<div class="card">
+          <h3 style="margin-bottom:14px;">Retrait</h3>
+          <p class="muted" style="font-size:0.82rem;margin-bottom:14px;">Tu peux demander un retrait à tout moment dès qu'il y a du profit. Traitement sous 24 h en USDC, Wise ou virement bancaire.</p>
+          <div class="rule-row"><span class="muted">Profit en cours sur ce cycle</span><b class="${pos ? 'ok' : 'bad'}">${pos ? '+' : ''}${SF.fmt2(s.profit)}</b></div>
+          <div class="rule-row"><span class="muted">Ta part (${t.split} %)</span><b style="color:var(--orange)">${SF.fmt2(s.withdrawable)}</b></div>
+          <div class="rule-row"><span class="muted">Total déjà retiré</span><b>${SF.fmt2(totalWithdrawn)}</b></div>
+          <div class="rule-row"><span class="muted">Délai de traitement</span><b>≤ 24 h</b></div>
+          <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="doWithdraw('${v}')" ${s.withdrawable <= 0 ? 'disabled' : ''}>Demander un retrait</button>
+          <p class="muted" style="font-size:0.78rem;margin-top:12px;">Après retrait, ton solde repart au capital de ${SF.fmt(acc.capital)} pour le cycle suivant. Aucun plafond, aucun délai imposé entre deux retraits.</p>
+          ${certBtn}
+        </div>`;
+      }
+      return `
+        ${banner}
+        <div class="dash-head" style="margin-bottom:18px;"><div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.12em;">${vertLabel(v)} · ${t.name} · ${SF.fmt(acc.capital)}</div></div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="k">Solde</div><div class="v">${SF.fmt2(acc.balance)}</div><div class="sub">Capital ${SF.fmt(acc.capital)}</div></div>
+          <div class="kpi"><div class="k">Profit</div><div class="v ${pos ? 'pos' : 'neg'}">${pos ? '+' : ''}${SF.fmt2(s.profit)}</div><div class="sub">${pos ? '+' : ''}${s.profitPct}%</div></div>
+          <div class="kpi"><div class="k">Win rate</div><div class="v">${s.winRate}%</div><div class="sub">${s.wins}V / ${s.losses}D</div></div>
+          <div class="kpi"><div class="k">ROI</div><div class="v ${s.roi >= 0 ? 'pos' : 'neg'}">${s.roi >= 0 ? '+' : ''}${s.roi}%</div><div class="sub">${s.bets} ${unit}</div></div>
+        </div>
+        <div class="dash-grid">
+          <div style="display:flex;flex-direction:column;gap:22px;">
+            <div class="card">
+              <h3 style="margin-bottom:14px;">${acc.phase === "funded" ? "Profit du cycle" : "Progression"}</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:center;justify-items:center;">
+                <div style="text-align:center;">
+                  <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Objectif</div>
+                  ${ring(targetPct / 100, (s.profitPct >= 0 ? '+' : '') + s.profitPct + '%', '/ +' + t.target + '%')}
+                  <div class="muted" style="font-size:0.78rem;margin-top:10px;">Cible ${SF.fmt(s.targetBal)}</div>
+                </div>
+                <div style="text-align:center;">
+                  <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Drawdown</div>
+                  ${ring(ddPct / 100, Math.max(0, Math.round(ddPct)) + '%', 'utilisé')}
+                  <div class="muted" style="font-size:0.78rem;margin-top:10px;">Plancher ${SF.fmt(s.ddFloor)}</div>
+                </div>
+              </div>
+            </div>
+            ${actionCard}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:22px;">
+            <div class="card">
+              <h3 style="margin-bottom:10px;">Conditions de réussite</h3>
+              <p class="muted" style="font-size:0.82rem;margin-bottom:14px;">Toutes les conditions doivent être remplies AVANT la date limite. Le drawdown ne doit jamais être dépassé, à aucun moment.</p>
+              <div class="rule-row"><span class="muted">Objectif de profit</span><span><b style="margin-right:8px;">+${t.target}% en ${t.timeLimitDays} j</b>${cMark(s.profit >= s.targetProfit)}</span></div>
+              <div class="rule-row"><span class="muted">Drawdown total max</span><span><b style="margin-right:8px;">${t.maxDD}% (plancher ${SF.fmt(s.ddFloor)})</b>${cMark(ddPct <= t.maxDD && acc.status !== 'failed')}</span></div>
+              <div class="rule-row"><span class="muted">Drawdown journalier max</span><b>${t.maxDailyLoss}%</b></div>
+              <div class="rule-row"><span class="muted">${v === "predictions" ? "Exposition max / marché" : "Mise par pari"}</span><b>${t.minStakePct ? t.minStakePct + "% – " : ""}${t.maxStakePct}% du capital</b></div>
+              <div class="rule-row"><span class="muted">${unit === "positions" ? "Positions valides" : "Paris valides"}</span><span><b style="margin-right:8px;">${s.bets} / ${t.minBets}</b>${cMark(s.bets >= t.minBets)}</span></div>
+              <div class="rule-row"><span class="muted">Jours actifs</span><span><b style="margin-right:8px;">${s.activeDays} / ${t.minActiveDays}</b>${cMark(s.activeDays >= t.minActiveDays)}</span></div>
+              <div class="rule-row"><span class="muted">Semaines positives</span><span><b style="margin-right:8px;">${s.positiveWeeks} / ${t.totalWeeks}</b>${cMark(s.positiveWeeks >= t.positiveWeeks)}</span></div>
+              <div class="rule-row"><span class="muted">Délai restant</span><b>${s.daysRemaining} / ${t.timeLimitDays} j</b></div>
+            </div>
+            ${payoutCard}
+          </div>
+        </div>
+
+        <div class="dash-grid" style="margin-top:22px;">
+          <div class="card">
+            <h3 style="margin-bottom:14px;">Suivi du compte</h3>
+            <div class="rule-row"><span class="muted">Date de démarrage</span><b>${dateShort(acc.startedAt)}</b></div>
+            ${acc.fundedAt ? `<div class="rule-row"><span class="muted">Compte financé activé le</span><b style="color:var(--green)">${dateShort(acc.fundedAt)}</b></div>` : ''}
+            <div class="rule-row"><span class="muted">Statut actuel</span><b>${acc.status === 'funded' ? '<span class="pos">Compte financé actif</span>' : acc.status === 'passed' ? '<span class="pos">Évaluation réussie</span>' : acc.status === 'failed' ? '<span class="neg">Terminé · ' + SF.escapeHtml(acc.failReason || '') + '</span>' : 'En évaluation'}</b></div>
+            <div class="rule-row"><span class="muted">Pic de solde atteint</span><b>${SF.fmt2(acc.peak)}</b></div>
+            ${acc.phase === 'funded' ? `<div class="rule-row"><span class="muted">Total retiré sur ce compte</span><b style="color:var(--orange)">${SF.fmt2(acc.withdrawn || 0)}</b></div>` : ''}
+            <div class="rule-row"><span class="muted">Vertical</span><b>${vertLabel(v)} · ${SF.escapeHtml(t.name)}</b></div>
+            <div class="rule-row"><span class="muted">Capital confié</span><b>${SF.fmt(acc.capital)}</b></div>
+            <div class="rule-row"><span class="muted">Partage des gains</span><b style="color:var(--orange)">${t.split} %</b></div>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom:14px;">Statistiques détaillées</h3>
+            ${s.bets === 0 ? '<p class="muted" style="font-size:0.88rem;">Place ton premier pari pour voir tes stats apparaître.</p>' : `
+              <div class="rule-row"><span class="muted">Mise moyenne</span><b>${SF.fmt2(ext.avgStake)} <span class="muted" style="font-weight:500;">(${((ext.avgStake / acc.capital) * 100).toFixed(2)} %)</span></b></div>
+              <div class="rule-row"><span class="muted">Mise max prise</span><b>${SF.fmt2(ext.maxStake)} <span class="${ext.maxStakePctTaken > t.maxStakePct ? 'neg' : 'muted'}" style="font-weight:500;">(${ext.maxStakePctTaken.toFixed(2)} % / ${t.maxStakePct} % max)</span></b></div>
+              <div class="rule-row"><span class="muted">${v === "predictions" ? "Prix moyen" : "Cote moyenne"}</span><b>${ext.avgOdds.toFixed(2)}</b></div>
+              <div class="rule-row"><span class="muted">Meilleur ${unit === "positions" ? "trade" : "pari"}</span><b class="pos">+${SF.fmt2(ext.bestPnl)}</b></div>
+              <div class="rule-row"><span class="muted">Pire ${unit === "positions" ? "trade" : "pari"}</span><b class="neg">${SF.fmt2(ext.worstPnl)}</b></div>
+              <div class="rule-row"><span class="muted">Série en cours</span><b class="${ext.currentStreak.type === 'win' ? 'pos' : 'neg'}">${ext.currentStreak.count} ${ext.currentStreak.type === 'win' ? 'victoire(s)' : 'défaite(s)'} consécutive(s)</b></div>
+              <div class="rule-row"><span class="muted">Win rate</span><b>${s.winRate} % <span class="muted" style="font-weight:500;">(${s.wins} V / ${s.losses} D)</span></b></div>
+              <div class="rule-row"><span class="muted">ROI cumulé</span><b class="${s.roi >= 0 ? 'pos' : 'neg'}">${s.roi >= 0 ? '+' : ''}${s.roi} % <span class="muted" style="font-weight:500;">sur ${SF.fmt2(s.staked)} misés</span></b></div>
+            `}
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:22px;">
+          <h3 style="margin-bottom:8px;">Historique ${vertLabel(v)}</h3>
+          ${acc.bets.length === 0 ? '<div class="empty">Aucune activité pour le moment.</div>' : `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Événement</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th><th>Solde</th></tr></thead><tbody>${acc.bets.map(b => `<tr><td class="muted">${SF.fmtDate(b.date)}</td><td>${SF.escapeHtml(b.event)}</td><td>${SF.fmt2(b.stake)}</td><td>${b.odds.toFixed(2)}</td><td>${b.result === "win" ? '<span class="pos">Gagné</span>' : '<span class="neg">Perdu</span>'}</td><td class="${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</td><td>${SF.fmt2(b.balanceAfter)}</td></tr>`).join("")}</tbody></table></div>`}
+        </div>`;
+    }
+
+    function viewChallenges() {
+      const all = SF.activeAccounts();
+      if (!all.length) return `<div class="card center" style="padding:46px;"><h3 style="margin-bottom:10px;">Aucun challenge actif</h3><p class="muted" style="margin-bottom:22px;">Choisis ton premier challenge — Sports ou Prédictions — pour démarrer ton évaluation.</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;"><a class="btn btn-primary btn-lg" href="challenges.html?v=sports">${ICN_SPORT} Challenge Sports</a><a class="btn btn-ghost btn-lg" href="challenges.html?v=predictions">${ICN_CHART} Challenge Prédictions</a></div></div>`;
+      // Affiche un sélecteur si les deux verticales sont actives
+      const verticals = all.map(a => a.vertical || (a.tier && a.tier.vertical) || "sports");
+      const missingVertical = !verticals.includes("sports") ? "sports" : (!verticals.includes("predictions") ? "predictions" : null);
+      let tabs = "";
+      if (all.length >= 2) {
+        const params = new URLSearchParams(location.hash.split("?")[1] || "");
+        const cur = params.get("v") || verticals[0];
+        tabs = `<div class="seg" style="margin-bottom:18px;">
+          ${verticals.map(v => `<button class="${v === cur ? 'active' : ''}" onclick="location.hash='challenges?v=${v}'">${vertLabel(v)}</button>`).join("")}
+        </div>`;
+        const acc = all.find(a => (a.vertical || a.tier.vertical) === cur) || all[0];
+        return tabs + renderChallengeCard(acc);
+      }
+      const main = renderChallengeCard(all[0]);
+      const addCta = missingVertical ? `<div class="card center" style="padding:26px;margin-top:22px;border:1px dashed var(--border-strong);background:transparent;">
+        <h3 style="margin-bottom:6px;">Active aussi le marché ${vertLabel(missingVertical)}</h3>
+        <p class="muted" style="margin-bottom:16px;font-size:0.92rem;">${missingVertical === "predictions" ? "Étends ton edge aux marchés prédictifs — politique, tech, macro, sport. Bankroll dédiée, règles adaptées." : "Ajoute le marché sportif à ton arsenal — football, tennis, basket, e-sport. Bankroll dédiée, règles adaptées."}</p>
+        <a class="btn btn-primary" href="challenges.html?v=${missingVertical}">Démarrer un challenge ${vertLabel(missingVertical)}</a>
+      </div>` : "";
+      return main + addCta;
+    }
+
+    /* ---------- Marchés prédictifs (Polymarket) ---------- */
+    let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null;
+    const MOCK_PM_MARKETS = [
+      { id: "mk1", title: "Donald Trump élu en 2028 ?", category: "Politique", endDate: "2028-11-05T00:00:00Z", volume: 8400000, yesPrice: 0.42, noPrice: 0.58, source: "Démo" },
+      { id: "mk2", title: "Bitcoin au-dessus de 200 000 $ avant 2027 ?", category: "Crypto", endDate: "2027-01-01T00:00:00Z", volume: 5200000, yesPrice: 0.18, noPrice: 0.82, source: "Démo" },
+      { id: "mk3", title: "PSG vainqueur de la Ligue des Champions 2026 ?", category: "Sport", endDate: "2026-06-01T00:00:00Z", volume: 3100000, yesPrice: 0.22, noPrice: 0.78, source: "Démo" },
+      { id: "mk4", title: "OpenAI lèvera plus de 50 Md$ en 2026 ?", category: "Tech", endDate: "2026-12-31T00:00:00Z", volume: 2700000, yesPrice: 0.68, noPrice: 0.32, source: "Démo" },
+      { id: "mk5", title: "Récession américaine déclarée en 2026 ?", category: "Économie", endDate: "2026-12-31T00:00:00Z", volume: 4600000, yesPrice: 0.31, noPrice: 0.69, source: "Démo" },
+      { id: "mk6", title: "France championne du monde 2026 ?", category: "Sport", endDate: "2026-07-19T00:00:00Z", volume: 1900000, yesPrice: 0.15, noPrice: 0.85, source: "Démo" },
+      { id: "mk7", title: "Apple Vision Pro 2 annoncé en 2026 ?", category: "Tech", endDate: "2026-12-31T00:00:00Z", volume: 980000, yesPrice: 0.52, noPrice: 0.48, source: "Démo" },
+      { id: "mk8", title: "Taylor Swift annonce un nouvel album en 2026 ?", category: "Culture", endDate: "2026-12-31T00:00:00Z", volume: 1200000, yesPrice: 0.41, noPrice: 0.59, source: "Démo" },
+    ];
+    async function loadPolymarket() {
+      if (pmLoading || pmMarkets) return;
+      pmLoading = true; pmError = null;
+      // L'API Polymarket ne renvoie pas l'en-tête CORS pour les origines tierces.
+      // En démo on tente plusieurs proxies CORS publics en cascade.
+      // En production : remplacer par un Worker Cloudflare ou une Vercel Function (5 lignes).
+      const pmUrl = "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=24&order=volume24hr&ascending=false";
+      const PROXIES = [
+        u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+        u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+        u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
+        u => "https://thingproxy.freeboard.io/fetch/" + u,
+      ];
+      let data = null, lastErr = null;
+      for (const make of PROXIES) {
+        try {
+          const res = await fetch(make(pmUrl));
+          if (!res.ok) { lastErr = "HTTP " + res.status; continue; }
+          data = await res.json();
+          lastErr = null;
+          break;
+        } catch (e) { lastErr = e.message || "réseau"; }
+      }
+      if (!data) {
+        pmError = lastErr || "tous les proxies ont échoué";
+        pmMarkets = MOCK_PM_MARKETS;
+        pmLoading = false;
+        if (current() === "predictions") render();
+        return;
+      }
+      try {
+        pmMarkets = data.map(m => {
+          let outcomes = m.outcomes, prices = m.outcomePrices;
+          try { if (typeof outcomes === "string") outcomes = JSON.parse(outcomes); } catch (e) {}
+          try { if (typeof prices === "string") prices = JSON.parse(prices); } catch (e) {}
+          outcomes = outcomes || ["Yes", "No"]; prices = prices || ["0.5", "0.5"];
+          const yesIdx = outcomes.findIndex(o => /^(yes|oui)$/i.test(o));
+          const yesPrice = yesIdx >= 0 ? Number(prices[yesIdx]) : Number(prices[0]);
+          return {
+            id: String(m.id),
+            title: m.question || m.groupItemTitle || "Marché",
+            image: m.image || m.icon || null,
+            category: m.category || "Divers",
+            endDate: m.endDate || m.endDateIso || null,
+            volume: Number(m.volumeNum || m.volume || 0),
+            yesPrice, noPrice: 1 - yesPrice,
+            slug: m.slug, source: "Polymarket"
+          };
+        }).filter(m => m.yesPrice > 0 && m.yesPrice < 1).slice(0, 24);
+      } catch (e) {
+        pmError = e.message || "réseau";
+        pmMarkets = MOCK_PM_MARKETS;
+      }
+      pmLoading = false;
+      if (current() === "predictions") render();
+    }
+
+    function viewPredictions() {
+      const acc = SF.predictionsAccount();
+      // Mode "teaser" = pas de compte actif OU compte non actif (échoué/réussi en attente d'activation)
+      const isActive = !!(acc && (acc.status === "active" || acc.status === "funded"));
+      const locked = !isActive;
+      // Charge les marchés dans tous les cas
+      if (pmMarkets === null && !pmLoading) loadPolymarket();
+
+      let header = "";
+      if (locked) {
+        // Bannière CTA en haut + on continue à afficher les marchés en preview
+        const reason = !acc
+          ? "Ce sont les marchés que tu pourras trader avec ta bankroll Spovibe — politique, crypto, sport, tech, macro. Lance ton challenge Prédictions pour commencer à parier."
+          : (acc.status === "passed"
+              ? "Ton évaluation Prédictions est réussie ! Active ton compte financé pour reprendre tes positions."
+              : "Ce challenge Prédictions est terminé. Relances-en un nouveau pour reprendre.");
+        const ctaLabel = !acc ? "Démarrer un challenge Prédictions" : (acc.status === "passed" ? "Activer mon compte financé" : "Relancer un challenge");
+        const ctaHref = !acc ? "challenges.html?v=predictions" : (acc.status === "passed" ? "#challenges" : "challenges.html?v=predictions");
+        header = `<div class="pm-slip" style="margin-bottom:18px;background:linear-gradient(135deg, var(--orange) 0%, var(--orange-2) 100%);border-color:transparent;color:#fff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:220px;">
+              <div style="font-size:0.7rem;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.85);font-weight:700;">${!acc ? "Prévisualisation" : "Compte inactif"}</div>
+              <div style="font-weight:800;font-size:1.2rem;color:#fff;margin-top:4px;">${!acc ? "Marchés en direct, prix réels, volumes réels" : "Marchés en lecture seule"}</div>
+              <p style="color:rgba(255,255,255,0.92);font-size:0.94rem;margin-top:6px;line-height:1.5;">${reason}</p>
+            </div>
+            <a class="btn" style="background:#fff;color:var(--orange);font-weight:800;border-color:transparent;" href="${ctaHref}">${ctaLabel}</a>
+          </div>
+        </div>`;
+      }
+
+      // Stats en haut (compte actif) ou teaser-stats (locked)
+      let stats;
+      if (isActive) {
+        const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100;
+        const pend = (acc.pending || []).filter(p => p.kind === "prediction");
+        stats = `<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+          <div class="kpi"><div class="k">Solde disponible</div><div class="v">${SF.fmt2(avail)}</div><div class="sub">sur ${SF.fmt2(acc.balance)}</div></div>
+          <div class="kpi"><div class="k">Mise max / position</div><div class="v">${SF.fmt(maxStake)}</div><div class="sub">${acc.tier.maxStakePct}% du capital</div></div>
+          <div class="kpi"><div class="k">Positions en cours</div><div class="v">${pend.length}</div><div class="sub">${pend.length ? 'à régler' : 'aucune'}</div></div>
+        </div>`;
+      } else {
+        // Teaser : ce que tu pourrais avoir
+        stats = `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="kpi"><div class="k">Bankroll à viser</div><div class="v" style="color:var(--orange)">5k → 100k €</div><div class="sub">5 paliers HT 97 → 1 697 €</div></div>
+          <div class="kpi"><div class="k">Objectif</div><div class="v">+35 % / 30 j</div><div class="sub">Compte financé à la clé</div></div>
+          <div class="kpi"><div class="k">Expo max / marché</div><div class="v">5 %</div><div class="sub">Adaptée aux positions longues</div></div>
+          <div class="kpi"><div class="k">Partage des gains</div><div class="v" style="color:var(--green)">85 %</div><div class="sub">Retrait sous 24 h</div></div>
+        </div>`;
+      }
+
+      let info = "";
+      if (pmLoading && !pmMarkets) info = `<div class="pm-loading">Chargement des marchés depuis Polymarket…</div>`;
+      if (pmError && pmMarkets) info = `<div class="pm-warn">⚠ API Polymarket inaccessible (${SF.escapeHtml(pmError)}). Affichage de marchés de démonstration. <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:4px 10px;" onclick="pmRefresh()">Réessayer</button></div>`;
+
+      let slipHtml = "";
+      if (isActive && pmSlip) {
+        const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100;
+        const sideClass = pmSlip.side === "YES" ? "yes" : "no";
+        slipHtml = `<div class="pm-slip">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ta position</b><button class="btn btn-ghost btn-sm" onclick="pmClear()">Annuler</button></div>
+          <div class="pm-slip-q">${SF.escapeHtml(pmSlip.title)}</div>
+          <div class="pm-slip-side ${sideClass}">${pmSlip.side} · ${Math.round(pmSlip.price * 100)}¢</div>
+          <div class="alert error" id="pmAlert"></div>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="field" style="margin:0;flex:1;min-width:160px;"><label>Mise (€) · max ${SF.fmt(maxStake)}</label><input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}"></div>
+            <button class="btn btn-primary" onclick="pmConfirm()">Placer la position</button>
+          </div>
+          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${pmSlip.side}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
+        </div>`;
+      }
+
+      let pendHtml = "";
+      if (isActive) {
+        const pend = (acc.pending || []).filter(p => p.kind === "prediction");
+        if (pend.length) pendHtml = `<div class="card" style="margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3>Positions en cours (${pend.length})</h3><button class="btn btn-primary btn-sm" onclick="doSettle('predictions')">Simuler les résultats</button></div>${pend.map(p => `<div class="pending-row"><div><b>${SF.escapeHtml(p.event)}</b><div class="muted" style="font-size:0.8rem;">${p.pickName} @ ${Math.round((p.price || 1 / p.odds) * 100)}¢</div></div><div style="text-align:right;"><div>${SF.fmt2(p.stake)}</div><div class="muted" style="font-size:0.8rem;">gain ${SF.fmt2(p.stake * p.odds)}</div></div></div>`).join("")}</div>`;
+      }
+
+      if (!pmMarkets) return header + stats + info;
+
+      const cats = ["all", ...Array.from(new Set(pmMarkets.map(m => m.category)))];
+      const catsHtml = `<div class="pm-cats">${cats.map(c => `<button class="pm-cat ${c === pmCategory ? 'active' : ''}" onclick="pmSetCat('${c}')">${c === 'all' ? 'Tous' : SF.escapeHtml(c)}</button>`).join("")}</div>`;
+
+      const filtered = pmCategory === "all" ? pmMarkets : pmMarkets.filter(m => m.category === pmCategory);
+      const fmtVol = v => v >= 1e6 ? (v / 1e6).toFixed(1) + " M$" : v >= 1e3 ? (v / 1e3).toFixed(0) + " k$" : Math.round(v) + " $";
+      const fmtEnd = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+      // En mode locked, les boutons YES/NO renvoient à l'achat de challenge
+      const onYes = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','YES')`;
+      const onNo  = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','NO')`;
+      const cards = filtered.map(m => `<div class="pm-card ${pmSlip && pmSlip.marketId === m.id ? 'sel' : ''}" ${locked ? 'title="Lance ton challenge Prédictions pour parier"' : ''}>
+        <div class="pm-h">
+          <div class="pm-img">${m.image ? `<img src="${m.image}" alt="" onerror="this.parentNode.textContent='${(m.title[0] || '?').toUpperCase()}'"/>` : (m.title[0] || '?').toUpperCase()}</div>
+          <div class="pm-meta">${SF.escapeHtml(m.category)}${m.endDate ? ' · ' + fmtEnd(m.endDate) : ''}</div>
+        </div>
+        <h4>${SF.escapeHtml(m.title)}</h4>
+        <div class="pm-prices">
+          <button class="pm-yes" onclick="${onYes(m)}">YES ${Math.round(m.yesPrice * 100)}¢</button>
+          <button class="pm-no" onclick="${onNo(m)}">NO ${Math.round(m.noPrice * 100)}¢</button>
+        </div>
+        <div class="pm-foot"><span>Vol. ${fmtVol(m.volume)}</span><span>${SF.escapeHtml(m.source)}</span></div>
+      </div>`).join("");
+
+      const footNote = locked
+        ? `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Marchés en direct depuis <b style="color:var(--text)">Polymarket</b>. <a href="challenges.html?v=predictions" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour trader avec une bankroll jusqu'à 100 000 €.</p>`
+        : `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Données en direct depuis <b style="color:var(--text)">Polymarket</b> (Gamma API publique). Tes positions sont en monnaie virtuelle et impactent la bankroll de ton challenge selon les mêmes règles que les paris sportifs.</p>`;
+
+      return header + stats + info + slipHtml + pendHtml + catsHtml + `<div class="pm-grid">${cards || '<p class="muted">Aucun marché dans cette catégorie.</p>'}</div>` + footNote;
+    }
+
+    /* ---------- Arena (univers complet) ---------- */
+    function viewArena() {
+      const p = SF.poule(), a = SF.arena(), at = SF.arenaTourn(), c = SF.myCommunity(), bd = SF.badges(), ds = SF.getDuels();
+      const me = p.me;
+      const season = SF.currentSeason();
+      const daysToEnd = season.daysToEnd;
+      const totalSeasonDays = Math.ceil((season.end - season.start) / 86400000) + 1;
+      const dayInSeason = totalSeasonDays - daysToEnd;
+      const seasonPct = Math.min(100, Math.max(0, (dayInSeason / totalSeasonDays) * 100));
+
+      // Ladder de progression
+      const ladder = SF.DIVS.map(d => `<div class="lp-step ${d.id === a.division ? 'active' : ''} ${d.id === 'elite' ? 'elite' : ''}"><div class="lp-n">${d.name}</div><div class="lp-r">${d.id === 'elite' ? 'Financé' : ''}</div></div>`).join("");
+
+      // ====== HERO de SAISON — l'univers en cours ======
+      const promoChip = season.inPromoWeek
+        ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--orange);padding:5px 12px;border-radius:99px;font-size:0.74rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;"><span style="width:8px;height:8px;border-radius:50%;background:var(--orange);animation:vbPulse 2s infinite;"></span>Promotion Week — montées et descentes en direct</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.18);color:#fff;padding:5px 12px;border-radius:99px;font-size:0.74rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;border:1px solid rgba(255,255,255,0.22);">Promotion Week dans ${Math.max(0, daysToEnd - 7)} j</span>`;
+      const seasonHero = `<div class="hero-bo" style="margin-bottom:18px;">
+        <div style="flex:1;min-width:0;">
+          <div class="h-tag">Saison ${season.monthLabel} · Spovibe Arena</div>
+          <h2 style="margin:6px 0 6px;line-height:1.1;">${SF.escapeHtml(season.theme)}</h2>
+          <p style="color:rgba(255,255,255,0.92);font-size:0.95rem;max-width:520px;line-height:1.5;margin-bottom:14px;">${SF.escapeHtml(season.subtitle)}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            ${promoChip}
+            <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,0.18);color:rgba(255,255,255,0.92);padding:5px 12px;border-radius:99px;font-size:0.78rem;border:1px solid rgba(255,255,255,0.18);"><b style="color:#fff;">Top 15 %</b> promus en division supérieure</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,0.18);color:rgba(255,255,255,0.92);padding:5px 12px;border-radius:99px;font-size:0.78rem;border:1px solid rgba(255,255,255,0.18);"><b style="color:#fff;">1ᵉʳ Champion</b> = compte financé 100 k €</span>
+          </div>
+          <div style="margin-top:14px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.2);border-radius:99px;height:8px;overflow:hidden;max-width:520px;"><div style="height:100%;width:${seasonPct}%;background:linear-gradient(90deg,#fff,rgba(255,255,255,0.7));border-radius:99px;"></div></div>
+          <div style="display:flex;justify-content:space-between;max-width:520px;font-size:0.74rem;color:rgba(255,255,255,0.78);margin-top:6px;"><span>J${dayInSeason} / ${totalSeasonDays}</span><span>${season.monthLabelShort} · ${season.start.getFullYear()}</span></div>
+        </div>
+        <div class="h-side" style="text-align:center;">
+          <div style="font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.75);font-weight:700;margin-bottom:4px;">Fin de saison</div>
+          <div style="font-size:3.2rem;font-weight:900;letter-spacing:-0.04em;line-height:1;color:#fff;">J-${daysToEnd}</div>
+          <div style="font-size:0.78rem;color:rgba(255,255,255,0.85);margin-top:4px;">${season.end.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</div>
+        </div>
+      </div>`;
+
+      // Bandeau « Ta position » qui rend le statut joueur en 1 coup d'œil
+      const myZone = me.rank <= p.promoMax ? `<b class="pos">Zone de montée</b> · au top 15 % tu monteras en division supérieure` : me.rank >= p.relegMin ? `<b class="neg">Zone de descente</b> · sors du bottom 15 % avant fin de saison` : `<b style="color:var(--orange)">Zone de maintien</b> · vise le top 15 % pour grimper`;
+      const myStatusCard = `<div class="card" style="margin-bottom:18px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
+        <div style="flex:0 0 auto;">
+          <div class="muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;font-weight:700;">Ta position</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;"><span style="font-size:2.2rem;font-weight:900;color:var(--orange);letter-spacing:-0.03em;line-height:1;">${p.divName}</span><span class="muted" style="font-size:0.86rem;">poule #${a.poule}</span></div>
+        </div>
+        <div style="flex:1;min-width:200px;border-left:1px solid var(--border);padding-left:24px;">
+          <div class="muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;font-weight:700;">Rang</div>
+          <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.02em;margin-top:4px;">${me.rank}<span class="muted" style="font-size:1rem;font-weight:500;"> / ${p.total}</span> <span style="font-size:0.92rem;font-weight:700;" class="${me.roi >= 0 ? 'pos' : 'neg'}">· ROI ${me.roi >= 0 ? '+' : ''}${me.roi}%</span></div>
+          <div class="muted" style="font-size:0.84rem;margin-top:4px;">${myZone}</div>
+        </div>
+      </div>`;
+
+      // Cartes tournois — la Soirée adopte le thème de la saison
+      const soireeCard = `<div class="tn-card ${at.soireeRegistered ? 'live' : ''}">
+        <span class="tn-tag">Cette semaine · ${SF.escapeHtml(season.tag)}</span>
+        <h3>Soirée ${SF.escapeHtml(season.theme)}</h3>
+        <p>Tournoi flash thématique sur les événements ${SF.escapeHtml(season.tag.toLowerCase())} de la semaine. <b style="color:var(--text)">1 247 inscrits</b>.</p>
+        <button class="btn ${at.soireeRegistered ? 'btn-ghost' : 'btn-primary'} btn-block" onclick="doToggleSoiree()">${at.soireeRegistered ? '✓ Inscrit · Se désinscrire' : "S'inscrire"}</button>
+      </div>`;
+      let survivorBody;
+      if (!at.survivor.entered) survivorBody = `<p>Format élimination : un mauvais prono et tu sors. Round 1 ouvert, <b style="color:var(--text)">312 survivants</b>.</p><button class="btn btn-primary btn-block" onclick="doSurvivorEnter()">Entrer en lice</button>`;
+      else if (at.survivor.eliminated) survivorBody = `<p>Éliminé au <b style="color:var(--text)">round ${at.survivor.round}</b>. Le prochain Survivor démarre bientôt.</p><button class="btn btn-ghost btn-block" onclick="doSurvivorRestart()">Réinitialiser</button>`;
+      else survivorBody = `<p>Tu es <b style="color:var(--text)">en lice au round ${at.survivor.round}</b>. Fais ton prono pour passer au tour suivant.</p><button class="btn btn-primary btn-block" onclick="doSurvivorPick()">Faire mon prono</button>`;
+      const survivorCard = `<div class="tn-card ${at.survivor.entered && !at.survivor.eliminated ? 'live' : ''}"><span class="tn-tag">Survivor</span><h3>Dernier survivant</h3>${survivorBody}</div>`;
+      const cupCard = c ? `<div class="tn-card live"><span class="tn-tag">Cup en cours</span><h3>Cup ${SF.escapeHtml(c.name)}</h3><p>Tu participes à la Cup de <b style="color:var(--text)">${SF.escapeHtml(c.name)}</b>. Selon les résultats, toute la communauté débloque des réductions.</p><button class="btn btn-ghost btn-block" onclick="go('community')">Ouvrir la communauté</button></div>`
+        : `<div class="tn-card"><span class="tn-tag">Cup de créateur</span><h3>Rejoins une Cup</h3><p>Les Cups de créateurs sont privées. Demande son code à ton créateur préféré pour rejoindre, et toute la communauté débloque des réductions.</p><button class="btn btn-ghost btn-block" onclick="go('community')">Rejoindre / créer</button></div>`;
+      const mastersCard = `<div class="tn-card ${season.inPromoWeek ? 'live' : ''}"><span class="tn-tag">Fin de saison · J-${daysToEnd}</span><h3>La grande finale</h3><p>Couronnement des nouveaux Élite à la fin de ${season.monthLabelShort}. Les meilleurs des poules Champion décrochent un <b style="color:var(--text)">compte financé</b>.</p><button class="btn btn-ghost btn-block" onclick="go('challenges')">Voir mon challenge</button></div>`;
+
+      // Duels
+      const pending = ds.filter(d => !d.settled), played = ds.filter(d => d.settled);
+      const duelsHtml = `
+        <div class="card" style="margin-bottom:14px;">
+          <h3 style="margin-bottom:10px;">Défier un ami</h3>
+          <div class="alert error" id="duAlert"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="field" style="margin:0;flex:1;min-width:160px;"><label>Pseudo de l'adversaire</label><input class="input" id="duOpp" placeholder="ex. TontonBankroll"></div>
+            <button class="btn btn-primary" onclick="doCreateDuel()">Envoyer le défi</button>
+          </div>
+          <p class="muted" style="font-size:0.8rem;margin-top:10px;">Ton ami reçoit une invitation. Le duel se joue au ROI sur la période (7 jours par défaut). En démo, un adversaire fictif est créé.</p>
+        </div>
+        ${pending.length ? `<div class="card" style="margin-bottom:14px;"><h3 style="margin-bottom:6px;">Duels en cours (${pending.length})</h3>${pending.map(d => `<div class="duel-row"><div class="vs"><b>vs ${SF.escapeHtml(d.opponent)}</b><span class="x">Période ${d.days} j · adv. ROI ${d.opponentRoi >= 0 ? '+' : ''}${d.opponentRoi}%</span></div><div class="scores"><span class="${d.myRoi >= d.opponentRoi ? 'pos' : 'neg'}">Toi ${d.myRoi >= 0 ? '+' : ''}${d.myRoi}%</span></div><button class="btn btn-primary btn-sm" onclick="doSettleDuel('${d.id}')">Régler</button></div>`).join("")}</div>` : ''}
+        ${played.length ? `<div class="card"><h3 style="margin-bottom:6px;">Historique des duels</h3>${played.map(d => `<div class="duel-row"><div class="vs"><b>vs ${SF.escapeHtml(d.opponent)}</b><span class="x">${SF.fmtDate(d.createdAt)}</span></div><div class="scores"><span class="muted">${d.myRoi >= 0 ? '+' : ''}${d.myRoi}% · ${d.opponentRoi >= 0 ? '+' : ''}${d.opponentRoi}%</span><span class="${d.myWin ? 'pos' : 'neg'}">${d.myWin ? 'Victoire' : 'Défaite'}</span></div><button class="btn btn-ghost btn-sm" onclick="doDeleteDuel('${d.id}')">Suppr.</button></div>`).join("")}</div>` : ''}
+      `;
+
+      // Leaderboard
+      const zone = r => r <= p.promoMax ? '<span class="pos" style="font-size:0.74rem;">Montée</span>' : r >= p.relegMin ? '<span class="neg" style="font-size:0.74rem;">Descente</span>' : '<span class="muted" style="font-size:0.74rem;">Maintien</span>';
+      let display = p.rows.slice(0, 10);
+      if (me.rank > 11) { display.push(null); p.rows.filter(r => r.rank >= me.rank - 1 && r.rank <= me.rank + 1).forEach(r => display.push(r)); }
+      const row = r => r === null
+        ? `<tr><td colspan="5" class="muted" style="text-align:center;">· · ·</td></tr>`
+        : `<tr style="${r.you ? 'background:var(--orange-soft);' : ''}"><td><b>${r.rank}</b></td><td>${r.you ? '<b style="color:var(--orange)">' + SF.escapeHtml(r.name) + ' (vous)</b>' : SF.escapeHtml(r.name)}</td><td>${r.bets}</td><td class="${r.roi >= 0 ? 'pos' : 'neg'}">${r.roi >= 0 ? '+' : ''}${r.roi}%</td><td>${zone(r.rank)}</td></tr>`;
+
+      // Badges
+      const iconStar = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15,9 22,9.5 17,15 18.5,22 12,18 5.5,22 7,15 2,9.5 9,9"/></svg>';
+      const badgesHtml = bd.map(b => `<div class="badge-tile ${b.unlocked ? 'on' : ''}"><div class="b-ic">${iconStar}</div><div class="b-n">${b.name}</div><div class="b-d">${b.desc}</div></div>`).join("");
+
+      return `
+        ${seasonHero}
+        ${myStatusCard}
+
+        <h3 style="font-size:1.1rem;margin:0 0 12px;">Ladder de progression</h3>
+        <div class="card" style="margin-bottom:18px;"><div class="lp">${ladder}</div><p class="muted" style="font-size:0.84rem;margin-top:10px;">Bronze → Argent → Or → Champion → <b style="color:var(--orange)">Élite (financé)</b>. Chaque mois, top 15 % de ta poule monte, bottom 15 % descend. Les vainqueurs des poules Champion décrochent leur compte financé.</p></div>
+
+        <h3 style="font-size:1.1rem;margin:24px 0 12px;">Univers en cours · ${SF.escapeHtml(season.theme)}</h3>
+        <div class="grid grid-2" style="gap:14px;">
+          ${soireeCard}
+          ${survivorCard}
+          ${cupCard}
+          ${mastersCard}
+        </div>
+
+        <h3 style="font-size:1.1rem;margin:28px 0 12px;">Mes duels</h3>
+        ${duelsHtml}
+
+        <h3 style="font-size:1.1rem;margin:28px 0 12px;">Classement de ma poule · Saison ${SF.escapeHtml(season.monthLabel)}</h3>
+        <div class="card" style="padding:6px 0;overflow-x:auto;">
+          <table class="history" style="min-width:520px;"><thead><tr><th>#</th><th>Joueur</th><th>Paris</th><th>ROI</th><th>Statut</th></tr></thead><tbody>${display.map(row).join("")}</tbody></table>
+        </div>
+        <p class="muted" style="font-size:0.82rem;margin-top:10px;">Top 15 % monte, bottom 15 % descend. <a href="reglement.html" style="color:var(--orange)">Voir le règlement</a>. Adversaires de démonstration.</p>
+
+        <h3 style="font-size:1.1rem;margin:28px 0 12px;">Mes badges</h3>
+        <div class="badges-grid">${badgesHtml}</div>
+
+        <h3 style="font-size:1.1rem;margin:28px 0 12px;">Calendrier de la saison ${SF.escapeHtml(season.monthLabelShort)}</h3>
+        <div class="card">
+          <div class="cal-row"><div class="wk">Semaines 1-3</div><div class="ev">Tournois hebdomadaires + soirées thématiques ${SF.escapeHtml(season.tag.toLowerCase())}.</div></div>
+          <div class="cal-row"><div class="wk">Semaine 4</div><div class="ev">« Promotion Week » : montées et descentes de division en direct.</div></div>
+          <div class="cal-row"><div class="wk">${season.end.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</div><div class="ev">Grande finale : les nouveaux Élite décrochent leur compte financé.</div></div>
+        </div>`;
+    }
+
+    /* ---------- Récompenses ---------- */
+    function viewRewards() {
+      const r = SF.getRewards(), ref = SF.referralCode();
+      return `
+        <div class="grid grid-2" style="gap:18px;">
+          <div class="card"><div class="k" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)">Crédits Spovibe</div><div style="font-size:2rem;font-weight:900;color:var(--orange);margin-top:6px;">${r.credits} €</div><p class="muted" style="font-size:0.88rem;margin-top:4px;">Déductibles de tes prochains challenges.</p></div>
+          <div class="card"><div class="k" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)">Code de parrainage</div><div style="margin-top:12px;"><span class="code-pill">${ref} <button class="btn btn-ghost btn-sm" onclick="copyTxt('${ref}')">Copier</button></span></div><p class="muted" style="font-size:0.88rem;margin-top:10px;">Partage-le : ton filleul et toi gagnez des crédits.</p></div>
+        </div>
+        <h3 style="margin:26px 0 12px;">Mes codes de réduction</h3>
+        <div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history"><thead><tr><th>Code</th><th>Avantage</th><th>Validité</th><th></th></tr></thead><tbody>${r.codes.length ? r.codes.map(c => `<tr><td><b>${c.code}</b></td><td>${c.label}</td><td class="muted">${c.expiry || "—"}</td><td><button class="btn btn-ghost btn-sm" onclick="copyTxt('${c.code}')">Copier</button></td></tr>`).join("") : '<tr><td colspan="4" class="empty">Aucun code pour le moment.</td></tr>'}</tbody></table></div>`;
+    }
+
+    /* ---------- Communauté ---------- */
+    function viewCommunity() {
+      const c = SF.myCommunity();
+      if (!c) return `
+        <div class="card lock-box">
+          <div style="margin:0 auto 16px;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--orange-soft);color:var(--orange);border:1px solid var(--orange-line);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3 style="margin-bottom:8px;">Espace réservé aux communautés</h3>
+          <p class="muted" style="max-width:480px;margin:0 auto 24px;">La discussion est accessible uniquement aux créateurs de contenu et aux membres de leur communauté. Rejoins-en une avec un code, ou crée la tienne.</p>
+          <div class="alert error" id="cAlert" style="max-width:560px;margin:0 auto 16px;"></div>
+          <div class="grid grid-2" style="gap:16px;text-align:left;max-width:560px;margin:0 auto;">
+            <div><div class="field"><label>Rejoindre via un code</label><input class="input" id="joinCode" placeholder="C-XXXXX"></div><button class="btn btn-ghost btn-block" onclick="doJoin()">Rejoindre</button></div>
+            <div><div class="field"><label>Créer ma communauté</label><input class="input" id="commName" placeholder="Nom de ta communauté"></div><button class="btn btn-primary btn-block" onclick="doCreate()">Créer</button></div>
+          </div>
+        </div>`;
+      const creator = SF.isCreator();
+      const list = c.messages.map(m => `<div class="msg"><div><span class="a">${SF.escapeHtml(m.author)}</span><span class="x">${SF.fmtDate(m.at)}</span></div><p>${SF.escapeHtml(m.text)}</p></div>`).join("");
+      return `
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+          <div><div style="font-weight:800;font-size:1.15rem;">${SF.escapeHtml(c.name)}</div><div class="muted" style="font-size:0.86rem;">${c.members.length + 1} membre(s) · ${creator ? 'Tu es le créateur' : 'Membre'}</div></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${creator ? `<span class="code-pill">${c.code} <button class="btn btn-ghost btn-sm" onclick="copyTxt('${c.code}')">Copier</button></span>` : ''}<button class="btn btn-ghost btn-sm" onclick="doLeave()">${creator ? 'Fermer la communauté' : 'Quitter'}</button></div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:14px;">Discussion</h3>
+          <div class="chat">${list}</div>
+          <form onsubmit="return doPost(event)" style="display:flex;gap:10px;margin-top:16px;"><input class="input" id="msgInput" placeholder="Écris un message…" required><button class="btn btn-primary" type="submit">Envoyer</button></form>
+        </div>`;
+    }
+
+    /* ---------- Paris sportifs ---------- */
+    function viewBetting() {
+      const acc = SF.sportsAccount();
+      const isActive = !!(acc && (acc.status === "active" || acc.status === "funded"));
+      const locked = !isActive;
+
+      let header = "";
+      if (locked) {
+        const reason = !acc
+          ? "Voici les matchs sur lesquels tu pourras parier avec ta bankroll Spovibe. Football, tennis, basket, hippique — démontre ton edge et passe financé."
+          : (acc.status === "passed"
+              ? "Ton évaluation Sports est réussie ! Active ton compte financé pour reprendre."
+              : "Ce challenge Sports est terminé. Relance-en un nouveau pour reprendre.");
+        const ctaLabel = !acc ? "Démarrer un challenge Sports" : (acc.status === "passed" ? "Activer mon compte financé" : "Relancer un challenge");
+        const ctaHref = !acc ? "challenges.html?v=sports" : (acc.status === "passed" ? "#challenges" : "challenges.html?v=sports");
+        header = `<div class="pm-slip" style="margin-bottom:18px;background:linear-gradient(135deg, var(--orange) 0%, var(--orange-2) 100%);border-color:transparent;color:#fff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:220px;">
+              <div style="font-size:0.7rem;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.85);font-weight:700;">${!acc ? "Prévisualisation" : "Compte inactif"}</div>
+              <div style="font-weight:800;font-size:1.2rem;color:#fff;margin-top:4px;">${!acc ? "Cotes en direct, marchés en direct" : "Cotes en lecture seule"}</div>
+              <p style="color:rgba(255,255,255,0.92);font-size:0.94rem;margin-top:6px;line-height:1.5;">${reason}</p>
+            </div>
+            <a class="btn" style="background:#fff;color:var(--orange);font-weight:800;border-color:transparent;" href="${ctaHref}">${ctaLabel}</a>
+          </div>
+        </div>`;
+      }
+
+      let stats, slipHtml = "", pendHtml = "";
+      if (isActive) {
+        const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100, pend = (acc.pending || []).filter(p => p.kind !== "prediction");
+        stats = `<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+          <div class="kpi"><div class="k">Solde disponible</div><div class="v">${SF.fmt2(avail)}</div><div class="sub">sur ${SF.fmt2(acc.balance)}</div></div>
+          <div class="kpi"><div class="k">Mise par pari</div><div class="v">${acc.tier.minStakePct ? SF.fmt(acc.capital * acc.tier.minStakePct / 100) + " – " : ""}${SF.fmt(maxStake)}</div><div class="sub">${acc.tier.minStakePct ? acc.tier.minStakePct + "% – " : ""}${acc.tier.maxStakePct}% du capital</div></div>
+          <div class="kpi"><div class="k">Paris en cours</div><div class="v">${pend.length}</div><div class="sub">${pend.length ? 'à régler' : 'aucun'}</div></div>
+        </div>`;
+        if (slip) slipHtml = `<div class="slip">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ton pari</b><button class="btn btn-ghost btn-sm" onclick="clearSlip()">Annuler</button></div>
+          <div class="muted" style="font-size:0.86rem;">${SF.escapeHtml(slip.event)}</div>
+          <div style="font-weight:700;margin:2px 0 12px;">${SF.escapeHtml(slip.pickName)} <span style="color:var(--orange)">@ ${slip.odds.toFixed(2)}</span></div>
+          <div class="alert error" id="wAlert"></div>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="field" style="margin:0;flex:1;min-width:150px;"><label>Mise (€) · ${acc.tier.minStakePct ? SF.fmt(acc.capital * acc.tier.minStakePct / 100) + " – " : "max "}${SF.fmt(maxStake)}</label><input class="input" id="wStake" type="number" min="1" step="1" value="${slip.stake || ''}" oninput="onStake(this.value)" placeholder="ex. ${Math.round(maxStake)}"></div>
+            <button class="btn btn-primary" onclick="confirmWager()">Placer le pari</button>
+          </div>
+          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Gain potentiel : <b id="wPayout" style="color:var(--text)">${SF.fmt2(slip.odds * (slip.stake || 0))}</b></div>
+        </div>`;
+        if (pend.length) pendHtml = `<div class="card" style="margin-bottom:22px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3>Paris en cours (${pend.length})</h3><button class="btn btn-primary btn-sm" onclick="doSettle('sports')">Simuler les résultats</button></div>${pend.map(p => `<div class="pending-row"><div><b>${SF.escapeHtml(p.event)}</b><div class="muted" style="font-size:0.8rem;">${SF.escapeHtml(p.pickName)} @ ${p.odds.toFixed(2)}</div></div><div style="text-align:right;"><div>${SF.fmt2(p.stake)}</div><div class="muted" style="font-size:0.8rem;">gain ${SF.fmt2(p.stake * p.odds)}</div></div></div>`).join("")}</div>`;
+      } else {
+        // Teaser stats
+        stats = `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="kpi"><div class="k">Bankroll à viser</div><div class="v" style="color:var(--orange)">5k → 100k €</div><div class="sub">5 paliers HT 97 → 1 697 €</div></div>
+          <div class="kpi"><div class="k">Objectif</div><div class="v">+35 % / 30 j</div><div class="sub">Compte financé à la clé</div></div>
+          <div class="kpi"><div class="k">Mise par pari</div><div class="v">2 % – 5 %</div><div class="sub">du capital</div></div>
+          <div class="kpi"><div class="k">Partage des gains</div><div class="v" style="color:var(--green)">85 %</div><div class="sub">Retrait sous 24 h</div></div>
+        </div>`;
+      }
+      // En mode locked, cliquer sur une cote renvoie au checkout du challenge Sports
+      const onPick = (fid, k) => locked ? `location.href='challenges.html?v=sports'` : `pickSel('${fid}','${k}')`;
+
+      // ===== Vue par défaut : GRILLE DE CATÉGORIES DE SPORT =====
+      if (!bettingSport) {
+        const sportSvg = {
+          "Football": '<svg viewBox="0 0 100 100" fill="currentColor"><circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" stroke-width="3"/><path d="M50 28l16 12-6 19h-20l-6-19z" fill="currentColor"/><path d="M50 28L34 13M50 28l16-15M66 40l20 5M40 59l-18 8M60 59l18 8M50 80V96" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+          "Tennis": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><circle cx="36" cy="36" r="24"/><path d="M14 60l-6 12 14 14 12-6"/><path d="M18 30c8 4 18 14 22 22"/><path d="M54 18c-4 8-14 18-22 22"/></svg>',
+          "Basket": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><circle cx="50" cy="50" r="40"/><path d="M10 50h80M50 10v80M22 22c14 14 14 42 0 56M78 22c-14 14-14 42 0 56" stroke-linecap="round"/></svg>',
+          "E-sport": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="14" y="34" width="72" height="40" rx="14"/><circle cx="34" cy="54" r="4" fill="currentColor"/><circle cx="66" cy="54" r="4" fill="currentColor"/><path d="M22 50v8M22 54h8" stroke-linecap="round"/><path d="M70 54h8M74 50v8" stroke-linecap="round"/></svg>',
+          "Rugby": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><ellipse cx="50" cy="50" rx="32" ry="20" transform="rotate(-30 50 50)"/><path d="M36 36l28 28M40 44l20 12M44 36l20 12"/></svg>',
+          "Hippique": '<svg viewBox="0 0 100 100" fill="currentColor"><path d="M30 78c0-12 6-22 14-28-4-6-2-14 6-16 4-1 6 1 6 4l-2 6 14-6c8-4 16 0 16 8 0 6-6 10-10 8-2-1-2-2-2-4l-6 4-2 8 8 18-12-2-8-12-6 4v8h-16z"/></svg>',
+          "MMA": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><path d="M30 30c-6 0-10 4-10 10v22c0 8 6 14 14 14h26c8 0 14-6 14-14V40c0-6-4-10-10-10h-4M44 30v18M56 30v18M44 30c0-4 2-6 6-6s6 2 6 6"/></svg>',
+          "Hockey": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 80L70 30l8 8L28 88z"/><rect x="22" y="76" width="12" height="14" rx="2" transform="rotate(-45 28 83)"/><ellipse cx="80" cy="78" rx="10" ry="4" fill="currentColor"/></svg>',
+          "Volley": '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3"><circle cx="50" cy="50" r="40"/><path d="M50 10c0 14-14 40 0 80M50 10c14 14 28 40 0 80M10 50c14-14 40-28 80 0M10 50c14 14 40 28 80 0"/></svg>',
+        };
+        const cards = SF.SPORT_CATEGORIES.map(s => {
+          const count = SF.FIXTURES.filter(f => f.sport === s.id).length;
+          const icon = sportSvg[s.id] || '';
+          if (s.soon) {
+            return `<div class="sport-card soon" title="Disponible bientôt">
+              <span class="sport-count">Bientôt</span>
+              <div>
+                <h3>${SF.escapeHtml(s.id)}</h3>
+                <div class="sport-desc">${SF.escapeHtml(s.desc)}</div>
+              </div>
+              <span class="sport-cta">Bientôt disponible</span>
+              <div class="sport-svg">${icon}</div>
+            </div>`;
+          }
+          return `<div class="sport-card" onclick="goSport('${s.id}')">
+            <span class="sport-count">${count} match${count > 1 ? "s" : ""}</span>
+            <div>
+              <h3>${SF.escapeHtml(s.id)}</h3>
+              <div class="sport-desc">${SF.escapeHtml(s.desc)}</div>
+            </div>
+            <span class="sport-cta">Tous les matchs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+            <div class="sport-svg">${icon}</div>
+          </div>`;
+        }).join("");
+        const footNoteGrid = locked
+          ? `<p class="muted" style="font-size:0.84rem;margin-top:18px;">Cliquez sur un sport pour voir les matchs. <a href="challenges.html?v=sports" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour parier.</p>`
+          : `<p class="muted" style="font-size:0.84rem;margin-top:18px;">Cliquez sur un sport pour voir les matchs et placer un pari.</p>`;
+        return header + stats + slipHtml + pendHtml + `<h2 style="font-size:1.2rem;margin:8px 0 4px;">Choisis ta discipline</h2>` + `<div class="sport-grid">${cards}</div>` + footNoteGrid;
+      }
+
+      // ===== Vue détaillée : MATCHS DU SPORT SÉLECTIONNÉ =====
+      const sportFixtures = SF.FIXTURES.filter(f => f.sport === bettingSport);
+      const fixturesHtml = `<div class="card" style="margin-bottom:14px;">${sportFixtures.map(f => `
+        <div class="fixture">
+          <div><div class="meta">${f.league} · ${f.time}</div><div class="teams">${f.home} <span class="muted">vs</span> ${f.away}</div></div>
+          <div class="odds">${f.sels.map(s => `<button class="odds-btn ${(!locked && slip && slip.fixtureId === f.id && slip.pick === s.k) ? 'sel' : ''}" onclick="${onPick(f.id, s.k)}" ${locked ? 'title="Lance ton challenge Sports pour parier"' : ''}><span class="lbl">${s.k === 'X' ? 'Nul' : s.k}</span><span class="val">${s.o.toFixed(2)}</span></button>`).join("")}</div>
+        </div>`).join("")}</div>`;
+      const footNote = locked
+        ? `<p class="muted" style="font-size:0.84rem;">Matchs et cotes de démonstration. <a href="challenges.html?v=sports" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour parier avec une bankroll jusqu'à 100 000 €.</p>`
+        : `<p class="muted" style="font-size:0.84rem;">Données et résultats de démonstration. « Simuler les résultats » règle tes paris en cours (issue probabiliste pondérée par la cote).</p>`;
+      return header + stats + slipHtml + pendHtml +
+        `<button class="sport-back" onclick="backSport()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>Toutes les disciplines</button>` +
+        `<h2 style="font-size:1.2rem;margin:4px 0 14px;">${SF.escapeHtml(bettingSport)} · matchs à venir</h2>` + fixturesHtml + footNote;
+    }
+
+    /* ---------- Profil & paiements ---------- */
+    function viewProfile() {
+      const u = SF.currentUser(), pays = SF.payments();
+      const fundedAccs = SF.activeAccounts().filter(a => a.phase === "funded");
+      let fundedCard = '<div class="card"><h3 style="margin-bottom:8px;">Comptes financés</h3><p class="muted" style="font-size:0.92rem;">Aucun compte financé actif. Réussis une évaluation pour débloquer les retraits.</p></div>';
+      if (fundedAccs.length) {
+        fundedCard = `<div class="card"><h3 style="margin-bottom:12px;">Comptes financés (${fundedAccs.length})</h3>` +
+          fundedAccs.map(acc => { const s = SF.stats(acc); const v = acc.vertical || acc.tier.vertical || "sports";
+            return `<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;${fundedAccs.indexOf(acc) === 0 ? 'border:0;padding:0;margin:0;' : ''}">
+              <div style="font-weight:800;margin-bottom:8px;">${v === "predictions" ? ICN_CHART : ICN_SPORT} ${vertLabel(v)} · ${acc.tier.name}</div>
+              <div class="rule-row"><span class="muted">Part retirable (${acc.tier.split}%)</span><b style="color:var(--orange)">${SF.fmt2(s.withdrawable)}</b></div>
+              <div class="rule-row"><span class="muted">Déjà retiré</span><b>${SF.fmt2(acc.withdrawn || 0)}</b></div>
+              <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="doWithdraw('${v}')" ${s.withdrawable <= 0 ? 'disabled' : ''}>Demander un retrait</button>
+            </div>`;
+          }).join("") + `</div>`;
+      }
+      return `
+        <div class="grid grid-2" style="gap:18px;align-items:start;">
+          <div class="card">
+            <h3 style="margin-bottom:14px;">Profil</h3>
+            <div class="alert ok" id="pOk"></div><div class="alert error" id="pErr"></div>
+            <div class="field"><label>Nom complet</label><input class="input" id="pName" value="${SF.escapeHtml(u.name)}"></div>
+            <div class="field"><label>E-mail</label><input class="input" value="${SF.escapeHtml(u.email)}" disabled></div>
+            <button class="btn btn-primary" onclick="saveProfile()">Enregistrer</button>
+          </div>
+          ${fundedCard}
+        </div>
+        <h3 style="margin:26px 0 12px;">Historique de paiement</h3>
+        <div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Type</th><th>Détail</th><th>Montant</th><th></th></tr></thead><tbody>${pays.length ? pays.map((p, i) => `<tr><td class="muted">${SF.fmtDate(p.at)}</td><td>${p.type}</td><td>${SF.escapeHtml(p.label)}</td><td class="${p.dir === 'in' ? 'pos' : ''}">${p.dir === 'in' ? '+' : '−'}${SF.fmt2(p.amount)}${p.dir === 'out' ? ' HT' : ''}</td><td>${p.type === 'Retrait' ? `<button class="cert-link-row" onclick="openPayoutCert(${p.at})">Certificat</button>` : ''}</td></tr>`).join("") : '<tr><td colspan="5" class="empty">Aucun paiement.</td></tr>'}</tbody></table></div>`;
+    }
+
+    /* ---------- Paramètres ---------- */
+    function viewSettings() {
+      const p = SF.prefs();
+      return `
+        <div class="card" style="margin-bottom:18px;">
+          <h3 style="margin-bottom:14px;">Mot de passe</h3>
+          <div class="alert ok" id="sOk"></div><div class="alert error" id="sErr"></div>
+          <div class="bet-form"><div class="field"><label>Mot de passe actuel</label><input class="input" id="oldP" type="password"></div><div class="field"><label>Nouveau mot de passe</label><input class="input" id="newP" type="password"></div></div>
+          <button class="btn btn-primary" onclick="savePass()">Changer le mot de passe</button>
+        </div>
+        <div class="card" style="margin-bottom:18px;">
+          <h3 style="margin-bottom:8px;">Préférences</h3>
+          <label class="rule-row" style="cursor:pointer;"><span>Notifications de tournoi</span><input type="checkbox" id="prefNotifs" ${p.notifs ? 'checked' : ''} onchange="savePref()"></label>
+          <label class="rule-row" style="cursor:pointer;"><span>Newsletter Spovibe</span><input type="checkbox" id="prefNews" ${p.newsletter ? 'checked' : ''} onchange="savePref()"></label>
+        </div>
+        <div class="card" style="border-color:rgba(229,72,77,0.3);">
+          <h3 style="margin-bottom:8px;">Zone sensible</h3>
+          <p class="muted" style="font-size:0.9rem;margin-bottom:14px;">Réinitialiser efface la progression du challenge choisi.</p>
+          ${SF.sportsAccount() ? `<button class="btn btn-ghost" onclick="doReset('sports')" style="margin:0 8px 8px 0;">Réinitialiser Sports</button>` : ''}
+          ${SF.predictionsAccount() ? `<button class="btn btn-ghost" onclick="doReset('predictions')" style="margin:0 8px 8px 0;">Réinitialiser Prédictions</button>` : ''}
+          <button class="btn btn-ghost" onclick="SF.logout();location.href='index.html'">Déconnexion</button>
+        </div>`;
+    }
+
+    /* ---------- Mes certificats ---------- */
+    function viewCertificates() {
+      const accs = SF.activeAccounts();
+      const eligible = accs.filter(a => a.status === "passed" || a.phase === "funded");
+      const payouts = SF.payments().filter(p => p.type === "Retrait");
+
+      if (!eligible.length && !payouts.length) {
+        return `<div class="card center" style="padding:46px;">
+          <div style="width:60px;height:60px;border-radius:50%;background:var(--orange-soft);color:var(--orange);display:grid;place-items:center;margin:0 auto 14px;">${I.cert}</div>
+          <h3 style="margin-bottom:10px;">Pas encore de certificat</h3>
+          <p class="muted" style="max-width:480px;margin:0 auto;">Tes certificats apparaîtront ici dès ta première évaluation validée ou ton premier retrait. Tu pourras les télécharger en PNG, PDF ou SVG pour les partager.</p>
+        </div>`;
+      }
+
+      const achievementCards = eligible.map(a => {
+        const v = a.vertical || a.tier.vertical || "sports";
+        const dateLabel = a.fundedAt ? `Compte activé ${dateShort(a.fundedAt)}` : `Évaluation réussie`;
+        return `<div class="cert-card">
+          <div class="cert-card-thumb" style="background:linear-gradient(135deg,var(--orange),var(--orange-2));">
+            <div style="width:54px;height:54px;color:#fff;">${I.cert}</div>
+          </div>
+          <div class="cert-card-body">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;color:var(--orange);margin-bottom:6px;">Réussite ${vertLabel(v)}</div>
+            <h4 style="font-size:1rem;margin-bottom:4px;">${SF.escapeHtml(a.tier.name)} · ${SF.fmt(a.capital)}</h4>
+            <div class="muted" style="font-size:0.84rem;margin-bottom:14px;">${dateLabel}</div>
+            <button class="btn btn-primary btn-block btn-sm" onclick="openAchievementCert('${v}')">Voir &amp; télécharger</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      const payoutCards = payouts.map(p => `<div class="cert-card">
+        <div class="cert-card-thumb" style="background:linear-gradient(135deg,#1FB573,#3DD68F);">
+          <div style="width:54px;height:54px;color:#fff;">${I.wallet}</div>
+        </div>
+        <div class="cert-card-body">
+          <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;color:var(--green);margin-bottom:6px;">Preuve de paiement</div>
+          <h4 style="font-size:1rem;margin-bottom:4px;">${SF.fmt2(p.amount)}</h4>
+          <div class="muted" style="font-size:0.84rem;margin-bottom:14px;">Payé le ${SF.fmtDate(p.at)}</div>
+          <button class="btn btn-primary btn-block btn-sm" onclick="openPayoutCert(${p.at})">Voir &amp; télécharger</button>
+        </div>
+      </div>`).join("");
+
+      const totalCerts = eligible.length + payouts.length;
+      return `<div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+        <div>
+          <h3 style="margin-bottom:4px;">${totalCerts} certificat${totalCerts > 1 ? 's' : ''} disponibles</h3>
+          <p class="muted" style="font-size:0.86rem;">Partage tes succès sur Twitter, LinkedIn ou Instagram. Chaque certificat a un numéro unique vérifiable.</p>
+        </div>
+        <span style="background:var(--orange-soft);color:var(--orange);padding:8px 14px;border-radius:99px;font-size:0.78rem;font-weight:700;">Format PNG · PDF · SVG</span>
+      </div>
+      ${eligible.length ? `<h3 style="margin:24px 0 12px;">Certificats de réussite (${eligible.length})</h3>
+        <div class="cert-grid">${achievementCards}</div>` : ''}
+      ${payouts.length ? `<h3 style="margin:32px 0 12px;">Preuves de paiement (${payouts.length})</h3>
+        <div class="cert-grid">${payoutCards}</div>` : ''}`;
+    }
+
+    const VIEWS = { overview: viewOverview, challenges: viewChallenges, betting: viewBetting, predictions: viewPredictions, arena: viewArena, certificates: viewCertificates, rewards: viewRewards, community: viewCommunity, profile: viewProfile, settings: viewSettings };
+
+    /* ---------- Routing & shell ---------- */
+    function current() { const h = (location.hash || "#overview").slice(1); return VIEWS[h] ? h : "overview"; }
+    function go(sec) { location.hash = sec; }
+    function renderSidebar() {
+      const u = SF.currentUser(), cur = current();
+      const a = SF.arena(), div = a ? (SF.DIVS.find(d => d.id === a.division) || {}).name : "";
+      document.getElementById("boWho").innerHTML = `<div class="nm">${SF.escapeHtml(u.name)}</div><div class="em">${SF.escapeHtml(u.email)}</div>${div ? `<div class="rank-chip">★ ${div}</div>` : ''}`;
+      document.getElementById("boNav").innerHTML = SECTIONS.map(item => {
+        const [id, label, icon] = item;
+        if (id === "__sect") return `<div class="bo-sect">${label}</div>`;
+        return `<button class="bo-link ${id === cur ? 'active' : ''}" onclick="go('${id}')">${icon}<span>${label}</span></button>`;
+      }).join("");
+    }
+    function render() {
+      const cur = current(), tt = TITLES[cur];
+      const head = cur === "overview" ? "" : `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="render()">Actualiser</button></div></div>`;
+      document.getElementById("view").innerHTML = head + VIEWS[cur]();
+      renderSidebar();
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    window.go = go;
+    window.addEventListener("hashchange", render);
+
+    /* ---------- Actions ---------- */
+    // Arena — tournois & duels
+    window.doToggleSoiree = () => { SF.toggleSoiree(); render(); };
+    window.doSurvivorEnter = () => { SF.survivorEnter(); render(); };
+    window.doSurvivorPick = () => { const r = SF.survivorPick(); if (r.error) { alert(r.error); return; } alert(r.survived ? `Survécu ! Tu passes au round ${r.round}.` : `Éliminé au round ${r.round}. Le prochain Survivor démarre bientôt.`); render(); };
+    window.doSurvivorRestart = () => { SF.survivorRestart(); render(); };
+    window.doCreateDuel = () => { const opp = document.getElementById("duOpp").value; const al = document.getElementById("duAlert"); const r = SF.createDuel(opp); if (r.error) { al.textContent = r.error; al.classList.add("show"); return; } render(); };
+    window.doSettleDuel = id => { const r = SF.settleDuel(id); if (r.error) { alert(r.error); return; } alert(r.win ? "Victoire !" : "Défaite — tu auras la prochaine."); render(); };
+    window.doDeleteDuel = id => { SF.deleteDuel(id); render(); };
+
+    let slip = null;
+    let bettingSport = null;
+    window.goSport = (s) => { bettingSport = s; render(); window.scrollTo({ top: 0, behavior: "instant" }); };
+    window.backSport = () => { bettingSport = null; render(); window.scrollTo({ top: 0, behavior: "instant" }); };
+    window.pickSel = (fid, pick) => { const f = SF.FIXTURES.find(x => x.id === fid); const s = f.sels.find(x => x.k === pick); slip = { fixtureId: fid, pick, event: f.home + " – " + f.away, pickName: s.n, odds: s.o, stake: null }; render(); };
+    window.clearSlip = () => { slip = null; render(); };
+    window.onStake = v => { if (slip) { slip.stake = v === "" ? null : Number(v); const el = document.getElementById("wPayout"); if (el) el.textContent = SF.fmt2((slip.odds || 0) * (slip.stake || 0)); } };
+    window.confirmWager = () => { const acc = SF.sportsAccount(); const al = document.getElementById("wAlert"); const r = SF.placeWager(acc, { fixtureId: slip.fixtureId, pick: slip.pick, stake: Number(document.getElementById("wStake").value) }); if (r.error) { al.textContent = r.error; al.classList.add("show"); return; } slip = null; render(); };
+    // doSettle(vertical) — règle les paris/positions d'un vertical donné
+    window.doSettle = (vertical) => {
+      vertical = vertical || "sports";
+      const acc = SF.getAccount(vertical);
+      if (!acc) { alert("Aucun compte " + (vertical === "predictions" ? "Prédictions" : "Sports") + " actif."); return; }
+      const r = SF.settleAll(acc); if (r.error) { alert(r.error); return; }
+      const won = r.results.filter(x => x.win).length; const net = r.results.reduce((s, x) => s + x.pnl, 0);
+      const unit = vertical === "predictions" ? "position(s)" : "pari(s)";
+      alert(`${r.results.length} ${unit} réglé(s) : ${won} gagné(s). Résultat net : ${(net >= 0 ? '+' : '')}${SF.fmt2(net)}.`); render();
+    };
+    // Marchés prédictifs
+    window.pmPickSide = (id, side) => { const m = pmMarkets.find(x => x.id === id); if (!m) return; pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, title: m.title }; render(); };
+    window.pmClear = () => { pmSlip = null; render(); };
+    window.pmConfirm = () => { const acc = SF.predictionsAccount(); const al = document.getElementById("pmAlert"); const r = SF.placePrediction(acc, { marketId: pmSlip.marketId, marketTitle: pmSlip.title, side: pmSlip.side, price: pmSlip.price, stake: Number(document.getElementById("pmStake").value) }); if (r.error) { al.textContent = r.error; al.classList.add("show"); return; } pmSlip = null; render(); };
+    window.pmSetCat = cat => { pmCategory = cat; render(); };
+    window.pmRefresh = () => { pmMarkets = null; pmError = null; render(); };
+    let betResult = "win";
+    window.setResult = r => { betResult = r; document.getElementById("segWin").classList.toggle("active", r === "win"); document.getElementById("segLose").classList.toggle("active", r === "lose"); };
+    window.onBet = e => { e.preventDefault(); const acc = SF.sportsAccount(); const al = document.getElementById("betAlert"); const res = SF.placeBet(acc, { event: document.getElementById("bEvent").value, stake: document.getElementById("bStake").value, odds: document.getElementById("bOdds").value, result: betResult }); if (res.error) { al.textContent = res.error; al.classList.add("show"); return false; } betResult = "win"; render(); return false; };
+    window.doClaim = (vertical) => { const acc = SF.getAccount(vertical || "sports"); if (!acc) { alert("Aucun compte actif sur ce vertical."); return; } const r = SF.claimFunded(acc); if (r.error) { alert(r.error); return; } render(); };
+    window.doWithdraw = (vertical) => { const acc = SF.getAccount(vertical || "sports"); if (!acc) { alert("Aucun compte actif sur ce vertical."); return; } const r = SF.withdraw(acc); if (r.error) { alert(r.error); return; } alert("Retrait de " + SF.fmt2(r.payout) + " demandé. Traitement sous 24 h (démo)."); render(); };
+    window.doReset = (vertical) => {
+      const accs = SF.activeAccounts();
+      if (!accs.length) return;
+      let target = vertical;
+      if (!target && accs.length === 1) target = accs[0].vertical;
+      if (!target) {
+        target = prompt("Quel challenge réinitialiser ? Tape 'sports' ou 'predictions'.");
+        if (!target) return;
+        target = target.toLowerCase().trim();
+      }
+      if (target !== "sports" && target !== "predictions") { alert("Vertical invalide."); return; }
+      if (confirm(`Réinitialiser ton challenge ${target === "predictions" ? "Prédictions" : "Sports"} ? La progression sera effacée.`)) { SF.resetAccount(target); render(); }
+    };
+    window.copyTxt = t => { try { navigator.clipboard.writeText(t); } catch (e) {} };
+    window.doJoin = () => { const r = SF.joinCommunity(document.getElementById("joinCode").value); if (r.error) { const a = document.getElementById("cAlert"); a.textContent = r.error; a.classList.add("show"); return; } render(); };
+    window.doCreate = () => { const r = SF.createCommunity(document.getElementById("commName").value); if (r.error) { const a = document.getElementById("cAlert"); a.textContent = r.error; a.classList.add("show"); return; } render(); };
+    window.doLeave = () => { if (confirm("Quitter cette communauté ?")) { SF.leaveCommunity(); render(); } };
+    window.doPost = e => { e.preventDefault(); const r = SF.postMessage(document.getElementById("msgInput").value); if (!r.error) render(); return false; };
+    window.saveProfile = () => { const r = SF.updateProfile(document.getElementById("pName").value); const ok = document.getElementById("pOk"), er = document.getElementById("pErr"); ok.classList.remove("show"); er.classList.remove("show"); if (r.error) { er.textContent = r.error; er.classList.add("show"); return; } ok.textContent = "Profil mis à jour."; ok.classList.add("show"); renderSidebar(); };
+    window.savePass = () => { const r = SF.changePassword(document.getElementById("oldP").value, document.getElementById("newP").value); const ok = document.getElementById("sOk"), er = document.getElementById("sErr"); ok.classList.remove("show"); er.classList.remove("show"); if (r.error) { er.textContent = r.error; er.classList.add("show"); return; } ok.textContent = "Mot de passe mis à jour."; ok.classList.add("show"); document.getElementById("oldP").value = ""; document.getElementById("newP").value = ""; };
+    window.savePref = () => { SF.savePrefs({ notifs: document.getElementById("prefNotifs").checked, newsletter: document.getElementById("prefNews").checked }); };
+
+    /* ---------- Certificats ---------- */
+    window.openAchievementCert = (vertical) => {
+      const acc = SF.getAccount(vertical);
+      const u = SF.currentUser();
+      if (!acc || !u) { alert("Compte introuvable."); return; }
+      if (!window.SpovibeCert) { alert("Module certificat encore en chargement, réessaie dans une seconde."); return; }
+      SpovibeCert.showAchievement(u, acc);
+    };
+    window.openPayoutCert = (at) => {
+      const u = SF.currentUser(); if (!u) return;
+      if (!window.SpovibeCert) { alert("Module certificat encore en chargement, réessaie dans une seconde."); return; }
+      const pays = SF.payments();
+      const p = pays.find(x => x.at === at);
+      if (!p) { alert("Paiement introuvable."); return; }
+      // Contexte : on cherche le compte financé correspondant pour enrichir
+      const accs = SF.activeAccounts();
+      const acc = accs.find(a => a.phase === "funded") || accs[0] || null;
+      const ctx = acc ? {
+        tierName: acc.tier.name, tierCapital: acc.tier.capital,
+        vertical: acc.vertical || (acc.tier && acc.tier.vertical) || "sports",
+        method: "USDC",
+        totalPaid: pays.filter(x => x.type === "Retrait" && x.at <= at).reduce((sum, x) => sum + x.amount, 0),
+      } : { totalPaid: p.amount };
+      SpovibeCert.showPayout(u, p, ctx);
+    };
+
+    if (SF.currentUser()) render();
+  </script>
+</body>
+</html>

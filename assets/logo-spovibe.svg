@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 408 100" role="img" aria-label="Spovibe">
+  <title>Spovibe</title>
+  <desc>Logo Spovibe — lignes de vitesse, S violet, povibe sombre</desc>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@700&amp;display=swap');
+    .wm { font-family: 'Quicksand', 'Trebuchet MS', sans-serif; font-weight: 700; }
+  </style>
+  <g fill="#7C6BF6">
+    <rect x="58" y="28" width="30" height="10" rx="5" opacity=".6"/>
+    <rect x="42" y="43" width="46" height="10" rx="5"/>
+    <rect x="60" y="58" width="28" height="10" rx="5" opacity=".45"/>
+  </g>
+  <text class="wm" x="100" y="73" font-size="72"><tspan fill="#7C6BF6">S</tspan><tspan fill="#0F0E1A">povibe</tspan></text>
+</svg>
