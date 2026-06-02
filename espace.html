@@ -487,7 +487,7 @@
     }
 
     /* ---------- Marchés prédictifs (Polymarket) ---------- */
-    let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "volume24hr";
+    let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "endDate";
     async function loadPolymarket(force) {
       if (pmLoading) return;
       pmLoading = true; pmError = null;
@@ -591,9 +591,9 @@
       <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
         <input class="input" style="flex:1;min-width:200px;" placeholder="Rechercher un marché…" value="${SF.escapeHtml(pmSearch)}" oninput="pmSetSearch(this.value)">
         <select class="input" style="flex:0 0 200px;" onchange="pmSetSort(this.value)">
+          <option value="endDate" ${pmSort === 'endDate' ? 'selected' : ''}>Fin proche ↑</option>
           <option value="volume24hr" ${pmSort === 'volume24hr' ? 'selected' : ''}>Volume 24 h ↓</option>
           <option value="volume" ${pmSort === 'volume' ? 'selected' : ''}>Volume total ↓</option>
-          <option value="endDate" ${pmSort === 'endDate' ? 'selected' : ''}>Fin proche ↑</option>
           <option value="liquidity" ${pmSort === 'liquidity' ? 'selected' : ''}>Liquidité ↓</option>
         </select>
       </div>`;
