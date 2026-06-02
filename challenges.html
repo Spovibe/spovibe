@@ -44,7 +44,27 @@
           <span class="badge eval"><span class="dot"></span> <span id="coVertical">Évaluation</span></span>
         </div>
         <div id="coBody"></div>
+
+        <!-- Inline signup : visible uniquement si l'utilisateur n'est pas connecté -->
+        <div id="coSignup" style="display:none;border-top:1px solid var(--border);margin-top:18px;padding-top:18px;">
+          <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);font-weight:700;margin-bottom:14px;">Créer mon compte pour démarrer</div>
+          <div class="field">
+            <label for="suName">Nom complet</label>
+            <input class="input" type="text" id="suName" placeholder="Alex Dupont" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="suEmail">E-mail</label>
+            <input class="input" type="email" id="suEmail" placeholder="vous@exemple.com" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="suPassword">Mot de passe</label>
+            <input class="input" type="password" id="suPassword" placeholder="6 caractères minimum" autocomplete="new-password">
+          </div>
+          <p class="muted" style="font-size:0.78rem;margin:6px 0 0;">Déjà membre ? <a href="login.html" style="color:var(--orange);font-weight:600;">Se connecter</a></p>
+        </div>
+
         <div class="alert error" id="coAlert" style="margin-top:16px;"></div>
+        <div class="alert ok" id="coOkAlert" style="margin-top:16px;"></div>
         <button class="btn btn-primary btn-block btn-lg" id="coBtn" style="margin-top:8px;">Lancer mon évaluation</button>
         <p class="muted center" style="font-size:0.82rem;margin-top:14px;">Prix indiqués HT — la TVA est ajoutée au paiement selon votre pays. Démonstration : aucun paiement réel n'est effectué.</p>
       </div>
@@ -55,6 +75,7 @@
   <script src="assets/sb-config.js"></script>
   <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
+  <script src="assets/email.js"></script>
   <script>
     document.getElementById("nav").innerHTML = SF.renderNav();
     // Un admin ne peut pas acheter de challenge → redirection vers admin console
@@ -122,6 +143,10 @@
       const card = document.getElementById("card-" + id);
       if (card) card.style.outline = "2px solid var(--orange)";
       const c = COPY[current];
+      // Affiche le form signup si non connecté + adapte le label du bouton
+      const isLoggedIn = !!SF.currentUser();
+      document.getElementById("coSignup").style.display = isLoggedIn ? "none" : "block";
+      document.getElementById("coBtn").textContent = isLoggedIn ? "Lancer mon évaluation" : "Créer mon compte & démarrer";
       document.getElementById("coTitle").textContent = "Challenge " + selected.name + " · " + SF.fmt(selected.capital);
       document.getElementById("coVertical").textContent = c.coVertical;
       document.getElementById("coBody").innerHTML = `
@@ -145,17 +170,51 @@
 
     document.getElementById("coBtn").addEventListener("click", async () => {
       const alert = document.getElementById("coAlert");
+      const okAlert = document.getElementById("coOkAlert");
       const btn = document.getElementById("coBtn");
       alert.classList.remove("show");
+      okAlert.classList.remove("show");
       if (!selected) return;
-      if (!SF.currentUser()) { location.href = "signup.html"; return; }
-      // S'assurer que les données du user sont chargées avant de vérifier l'existant
+      const origLabel = btn.textContent;
+
+      // Cas A : utilisateur PAS connecté → signup + (selon confirmation e-mail) startChallenge
+      if (!SF.currentUser()) {
+        const name = document.getElementById("suName").value.trim();
+        const email = document.getElementById("suEmail").value.trim().toLowerCase();
+        const password = document.getElementById("suPassword").value;
+        btn.disabled = true; btn.textContent = "Création du compte…";
+        try {
+          // On dit à Supabase de rediriger vers /espace.html?activate=<tierId> après confirmation
+          const redirectTo = `${location.origin}/espace.html?activate=${encodeURIComponent(selected.id)}`;
+          const r = await SF.signup(name, email, password, { redirectTo });
+          if (r.error) { alert.textContent = r.error; alert.classList.add("show"); return; }
+          if (r.needsConfirmation) {
+            // L'achat se fera après confirmation e-mail (handled by espace.html?activate=...)
+            okAlert.innerHTML = `Compte créé ! <b>Vérifie ta boîte mail à ${email}</b> pour confirmer ton inscription. Le lien de confirmation activera automatiquement ton challenge ${selected.name}.`;
+            okAlert.classList.add("show");
+            okAlert.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          // Pas de confirmation requise = session déjà active = on enchaîne sur startChallenge
+          btn.textContent = "Activation du challenge…";
+          await SF.dataReady();
+          const res = await SF.startChallenge(selected.id);
+          if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+          location.href = "espace.html";
+          return;
+        } finally {
+          if (!okAlert.classList.contains("show")) {
+            btn.disabled = false; btn.textContent = origLabel;
+          }
+        }
+      }
+
+      // Cas B : utilisateur déjà connecté → startChallenge direct
       await SF.dataReady();
       const existing = SF.getAccount(selected.vertical);
       if (existing && (existing.status === "active" || existing.status === "funded" || existing.status === "passed")) {
         if (!confirm(`Tu as déjà un challenge ${COPY[selected.vertical].coVertical} en cours. Le remplacer effacera sa progression. Continuer ?`)) return;
       }
-      const origLabel = btn.textContent;
       btn.disabled = true; btn.textContent = "Enregistrement…";
       try {
         const res = await SF.startChallenge(selected.id);

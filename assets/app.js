@@ -91,7 +91,7 @@
 
   // Auth via Supabase (avec fallback localStorage si Supabase pas chargé,
   // utile pour les anciens utilisateurs de la démo localStorage)
-  async function signup(name, email, password) {
+  async function signup(name, email, password, opts) {
     email = (email || "").trim().toLowerCase();
     name = (name || "").trim();
     if (!name) return { error: "Veuillez indiquer votre nom." };
@@ -100,7 +100,7 @@
     if (/@spovibe\.com$/.test(email)) return { error: "Ce domaine d'e-mail est réservé. Utilise une adresse personnelle." };
     if ((password || "").length < 6) return { error: "Le mot de passe doit faire au moins 6 caractères." };
     if (global.SpovibeAuth) {
-      return await global.SpovibeAuth.signUp(name, email, password);
+      return await global.SpovibeAuth.signUp(name, email, password, opts);
     }
     // Fallback localStorage (démo hors-ligne)
     const users = getUsers();
@@ -247,6 +247,19 @@
         return { error: "Connexion serveur perdue. Réessaie." };
       }
     }
+    // E-mail de confirmation d'achat (fire-and-forget, échec silencieux)
+    if (global.SpovibeEmail) {
+      try {
+        global.SpovibeEmail.send("challenge_purchased", user.email, {
+          tierName: tier.name,
+          vertical: vertLabel,
+          capital: fmt(tier.capital),
+          fee: fmt(tier.fee),
+          timeLimitDays: tier.timeLimitDays,
+          target: tier.target,
+        });
+      } catch (e) {}
+    }
     return { ok: true, account: newAcc };
   }
 
@@ -353,6 +366,9 @@
 
   // Vérifie drawdown / délai / objectif (et critères de validité)
   function evaluateRules(acc, day) {
+    // Guard : si déjà passed/failed, ne rien faire (évite emails dupliqués)
+    if (acc.status !== "active" && acc.status !== "funded") return;
+    const prevStatus = acc.status;
     const t = acc.tier;
     const ddFloor = acc.capital * (1 - t.maxDD / 100);              // plancher de drawdown total
     const dailyFloor = (acc.dayStart[day] ?? acc.capital) - acc.capital * (t.maxDailyLoss / 100);
@@ -361,25 +377,35 @@
     if (acc.balance < ddFloor - 0.001) {
       acc.status = "failed";
       acc.failReason = `Drawdown total dépassé (plancher ${fmt(ddFloor)}, soit -${t.maxDD}%).`;
-      return;
-    }
-    if (acc.balance < dailyFloor - 0.001) {
+    } else if (acc.balance < dailyFloor - 0.001) {
       acc.status = "failed";
       acc.failReason = `Drawdown journalier dépassé (plancher du jour ${fmt(dailyFloor)}, soit -${t.maxDailyLoss}%).`;
-      return;
-    }
-
-    if (acc.phase === "evaluation" && acc.status === "active") {
+    } else if (acc.phase === "evaluation" && acc.status === "active") {
       const targetBal = acc.capital * (1 + t.target / 100);
       const reached = acc.balance >= targetBal - 0.001;
-      // Objectif atteint avec le nombre de paris valides requis -> réussite.
-      // (Les critères pluri-journaliers — 15 jours actifs, 3/4 semaines positives — sont
-      //  suivis et affichés ; en production ils conditionnent aussi la validation.)
       if (reached && acc.bets.length >= t.minBets) {
         acc.status = "passed";
       } else if (daysElapsed(acc) > t.timeLimitDays) {
         acc.status = "failed";
         acc.failReason = `Délai de ${t.timeLimitDays} jours dépassé avant la validation de l'objectif.`;
+      }
+    }
+    // E-mail à la transition de statut (fire-and-forget)
+    if (prevStatus !== acc.status && global.SpovibeEmail) {
+      const u = currentUser();
+      if (u && u.email) {
+        try {
+          if (acc.status === "passed") {
+            const profitPct = Math.round(((acc.balance - acc.capital) / acc.capital) * 100);
+            global.SpovibeEmail.send("challenge_passed", u.email, {
+              name: u.name, tierName: t.name, profitPct, split: t.split || 85,
+            });
+          } else if (acc.status === "failed") {
+            global.SpovibeEmail.send("challenge_failed", u.email, {
+              tierName: t.name, reason: acc.failReason,
+            });
+          }
+        } catch (e) {}
       }
     }
   }

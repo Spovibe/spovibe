@@ -79,12 +79,18 @@
   }
 
   // -- Wrappers d'auth --
-  async function signUp(name, email, password) {
+  // Accepte un opts {redirectTo} pour rediriger après confirmation e-mail
+  async function signUp(name, email, password, opts) {
+    opts = opts || {};
     try {
+      const supabaseOptions = { data: { name } };
+      if (opts.redirectTo) {
+        supabaseOptions.emailRedirectTo = opts.redirectTo;
+      }
       const { data, error } = await client().auth.signUp({
         email,
         password,
-        options: { data: { name } },
+        options: supabaseOptions,
       });
       if (error) return { error: traduireErreur(error.message) };
       // Le trigger SQL côté Supabase crée la ligne dans profiles automatiquement

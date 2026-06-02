@@ -131,18 +131,31 @@
     };
   }
 
-  // Fetch les events actifs (qui incluent les tags + leur sous-markets)
+  // Fetch les events actifs (qui incluent les tags + leur sous-markets).
+  // Limit réduite à 100 par page pour éviter les timeouts (le payload event est
+  // lourd : chaque event embarque sa liste de markets + tags + metadata).
   async function fetchEventsRaw(maxPages) {
-    maxPages = maxPages || 4;  // 4 × 200 = 800 events ≈ 2000+ markets
+    maxPages = maxPages || 3;  // 3 × 100 = 300 events ≈ 1000+ markets, suffisant
     const all = [];
     for (let p = 0; p < maxPages; p++) {
-      const url = `${API_BASE}/events?active=true&closed=false&limit=200&offset=${p * 200}&order=volume24hr&ascending=false`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Polymarket API: " + res.status);
+      const url = `${API_BASE}/events?active=true&closed=false&limit=100&offset=${p * 100}&order=volume24hr&ascending=false`;
+      // Retry une fois en cas de Load failed
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await fetch(url, { headers: { "Accept": "application/json" } });
+          if (res.ok) break;
+          lastErr = "HTTP " + res.status;
+        } catch (e) {
+          lastErr = e.message || "réseau";
+          await new Promise(r => setTimeout(r, 400));  // attente avant retry
+        }
+      }
+      if (!res || !res.ok) throw new Error("Polymarket API: " + (lastErr || "inaccessible"));
       const batch = await res.json();
       if (!Array.isArray(batch) || batch.length === 0) break;
       all.push(...batch);
-      if (batch.length < 200) break;  // dernière page
+      if (batch.length < 100) break;  // dernière page
     }
     return all;
   }

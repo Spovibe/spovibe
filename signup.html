@@ -44,6 +44,7 @@
   <script src="assets/sb-config.js"></script>
   <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
+  <script src="assets/email.js"></script>
   <script>
     document.getElementById("nav").innerHTML = SF.renderNav();
     const alert = document.getElementById("alert");
@@ -60,6 +61,12 @@
           document.getElementById("password").value
         );
         if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        // Envoie un e-mail de bienvenue brandé (en plus de l'e-mail de confirmation Supabase par défaut)
+        try {
+          if (window.SpovibeEmail) {
+            SpovibeEmail.send("welcome", document.getElementById("email").value.trim().toLowerCase(), { name: document.getElementById("name").value.trim() });
+          }
+        } catch (e) {}
         if (res.needsConfirmation) {
           alert.classList.remove("error"); alert.classList.add("ok","show");
           alert.textContent = "Vérifiez votre boîte mail pour confirmer votre compte.";
