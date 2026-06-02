@@ -26,6 +26,25 @@
     .adm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
     @media (max-width: 1100px) { .adm-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 600px) { .adm-grid { grid-template-columns: 1fr; } }
+    /* Risk Reports — tabs horizontaux scrollables */
+    .risk-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 6px; background: var(--bg-2); border-radius: 12px; margin-bottom: 18px; scrollbar-width: thin; }
+    .risk-tabs::-webkit-scrollbar { height: 6px; }
+    .risk-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .risk-tabs button { flex: 0 0 auto; background: transparent; border: none; padding: 10px 16px; border-radius: 8px;
+      font-size: 0.84rem; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap;
+      transition: background 0.15s, color 0.15s; font-family: inherit; }
+    .risk-tabs button:hover { background: var(--surface); color: var(--text); }
+    .risk-tabs button.active { background: var(--orange); color: #fff; }
+    .risk-tabs button.active:hover { background: var(--orange); }
+    .risk-table th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left; background: var(--bg-2); position: sticky; top: 0; }
+    .risk-table td { padding: 14px; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
+    .risk-table tr:last-child td { border-bottom: none; }
+    .risk-table tbody tr:hover { background: var(--bg-2); }
+    .risk-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; }
+    .risk-pill.pos { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .risk-pill.neg { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .risk-pill.warn { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .risk-pill.neutral { background: var(--bg-2); color: var(--muted); }
   </style>
 </head>
 <body>
@@ -57,6 +76,7 @@
     const I = {
       dash:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
       analyt:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-9"/><path d="M17 6h4v4"/></svg>',
+      risk:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 22h20L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><circle cx="12" cy="18" r="0.8" fill="currentColor"/></svg>',
       users:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
       eval:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
       funded:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4z"/></svg>',
@@ -67,6 +87,7 @@
     const SECTIONS = [
       ["dashboard", "Vue d'ensemble", I.dash],
       ["analytics", "Analytics", I.analyt],
+      ["risk", "Risk Reports", I.risk],
       ["users", "Utilisateurs", I.users],
       ["evals", "Évaluations en cours", I.eval],
       ["funded", "Comptes financés", I.funded],
@@ -77,6 +98,7 @@
     const TITLES = {
       dashboard: ["Vue d'ensemble", "KPI globaux du système Spovibe"],
       analytics: ["Analytics", "Funnel, marges, pass rate, cohortes et séries temporelles"],
+      risk: ["Risk Reports", "Analyse détaillée des risques par palier, vertical et profil trader"],
       users: ["Utilisateurs", "Tous les comptes enregistrés"],
       evals: ["Évaluations en cours", "Challenges actifs en phase d'évaluation"],
       funded: ["Comptes financés", "Traders en phase funded avec leur P&L"],
@@ -168,7 +190,7 @@
         const r = await SpovibeAuth.adminListUsers();
         if (r.error) {
           console.warn("admin load error:", r.error);
-          document.getElementById("view").innerHTML = `<div class="card center" style="padding:60px;"><h3>Accès refusé</h3><p class="muted" style="margin-top:10px;">Ton compte connecté n'est pas dans la table <code>admins</code> de Supabase. Ajoute ton UUID via le script <code>002_admin.sql</code>, puis recharge.</p><p class="muted" style="margin-top:6px;font-size:0.84rem;">Erreur : ${SF.escapeHtml(r.error)}</p></div>`;
+          document.getElementById("view").innerHTML = `<div class="card center" style="padding:60px;"><h3>Accès refusé</h3><p class="muted" style="margin-top:10px;">Ce compte n'est pas dans la table <code>admins</code> de Supabase. Ajouter l'UUID via le script <code>002_admin.sql</code>, puis recharger la page.</p><p class="muted" style="margin-top:6px;font-size:0.84rem;">Erreur : ${SF.escapeHtml(r.error)}</p></div>`;
           renderSidebar();
           return false;
         }
@@ -548,7 +570,7 @@
             <div class="adm-stat"><div class="k">Délai moyen achat</div><div class="v">${avgDaysToConvert != null ? avgDaysToConvert + 'j' : '—'}</div><div class="s">Entre signup et 1er challenge</div></div>
           </div>
 
-          <h4 style="margin:0 0 10px;">Arena t'aide-t-il à convertir ?</h4>
+          <h4 style="margin:0 0 10px;">Arena aide-t-il à convertir ?</h4>
           ${users.length === 0 ? '<p class="muted">Aucun utilisateur pour comparer.</p>' : `
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
             <div style="background:linear-gradient(135deg,rgba(124,107,246,0.12),rgba(124,107,246,0.04));border:1px solid var(--border);border-radius:14px;padding:16px;">
@@ -567,7 +589,7 @@
               <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">vs comptes sans Arena</div>
             </div>
           </div>
-          ${!arenaSampleOK ? `<p class="muted" style="font-size:0.82rem;margin-top:14px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);padding:10px 14px;border-radius:10px;">⚠ <b>Échantillon trop petit pour conclure</b> (${arenaEngaged.length} engaged + ${arenaNotEngaged.length} non-engaged). Attends d'avoir au moins 10 users dans chaque groupe pour que la comparaison soit statistiquement crédible.</p>` : `<p class="muted" style="font-size:0.82rem;margin-top:14px;">${arenaLift >= 25 ? '✓ Arena génère un lift de conversion significatif — continue à pousser dessus.' : arenaLift > 0 ? 'Arena apporte un lift modéré. À surveiller dans le temps.' : arenaLift === 0 ? 'Arena n\'a pas d\'impact mesurable sur la conversion.' : 'Arena semble réduire la conversion. Vérifie qu\'il ne distrait pas du parcours d\'achat.'}</p>`}
+          ${!arenaSampleOK ? `<p class="muted" style="font-size:0.82rem;margin-top:14px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);padding:10px 14px;border-radius:10px;">⚠ <b>Échantillon trop petit pour conclure</b> (${arenaEngaged.length} engaged + ${arenaNotEngaged.length} non-engaged). Minimum recommandé : 10 users par groupe pour une comparaison statistiquement crédible.</p>` : `<p class="muted" style="font-size:0.82rem;margin-top:14px;">${arenaLift >= 25 ? '✓ Arena génère un lift de conversion significatif — investissement justifié.' : arenaLift > 0 ? 'Arena apporte un lift modéré. À surveiller dans le temps.' : arenaLift === 0 ? 'Arena n\'a pas d\'impact mesurable sur la conversion.' : 'Arena semble réduire la conversion. Vérification : possible distraction du parcours d\'achat.'}</p>`}
           `}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;">
             <div class="adm-stat"><div class="k">Repeat buyers</div><div class="v">${repeatBuyers}</div><div class="s">Users avec ≥2 challenges</div></div>
@@ -782,15 +804,15 @@
         </div>
         ${fundedLoss.length ? `<div class="card" style="padding:18px;border-left:4px solid var(--orange);">
           <h3 style="margin:0 0 10px;">⚠ Comptes financés en perte (${fundedLoss.length})</h3>
-          <p class="muted" style="margin:0 0 12px;font-size:0.84rem;">Solde < capital initial — surveille la concentration de risque.</p>
+          <p class="muted" style="margin:0 0 12px;font-size:0.84rem;">Solde < capital initial — concentration de risque à surveiller.</p>
           <table class="history" style="width:100%;font-size:0.84rem;"><thead><tr><th>Trader</th><th>Palier</th><th>Solde</th><th>Perte cycle</th></tr></thead><tbody>${fundedLoss.slice(0, 10).map(t => `<tr><td><b>${SF.escapeHtml(t.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(t.email)}</span></td><td>${SF.escapeHtml(t.tier || '?')}</td><td>${fmt2(t.balance)}</td><td class="neg"><b>${fmt2(t.profit)}</b></td></tr>`).join("")}</tbody></table>
         </div>` : ""}`;
 
       // ---------- 7. ALERTES SANTÉ ----------
       const alerts = [];
-      if (revenue > 0 && marginPct < 0) alerts.push({ level: "danger", msg: `Marge brute négative (${marginPct}%). Vos payouts dépassent vos encaissements.` });
+      if (revenue > 0 && marginPct < 0) alerts.push({ level: "danger", msg: `Marge brute négative (${marginPct}%). Les payouts dépassent les encaissements.` });
       else if (revenue > 5000 && marginPct < 20) alerts.push({ level: "warn", msg: `Marge brute faible (${marginPct}%). Cible saine prop firm : 40-60%.` });
-      if (finished.length >= 5 && passRate > 25) alerts.push({ level: "warn", msg: `Pass rate élevé (${passRate}%). Cible saine : 8-15%. Vos challenges sont peut-être trop faciles.` });
+      if (finished.length >= 5 && passRate > 25) alerts.push({ level: "warn", msg: `Pass rate élevé (${passRate}%). Cible saine : 8-15%. Les challenges sont peut-être trop faciles.` });
       if (finished.length >= 5 && passRate < 3) alerts.push({ level: "warn", msg: `Pass rate très faible (${passRate}%). Aucun trader ne réussit, la beta va décrocher.` });
       if (traders.length >= 3 && fundedLoss.length / Math.max(1, traders.length) > 0.5) alerts.push({ level: "warn", msg: `${Math.round(fundedLoss.length / traders.length * 100)}% de comptes financés en perte. Concentration de risque à surveiller.` });
       if (revenue > 0 && exposureFunded > revenue * 3) alerts.push({ level: "warn", msg: `Exposition (${fmt(exposureFunded)}) très supérieure au revenue (${fmt(revenue)}). Risque de payouts cumulés > marge.` });
@@ -809,7 +831,366 @@
       </div>`;
     }
 
-    const VIEWS = { dashboard: viewDashboard, analytics: viewAnalytics, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
+    // =====================================================
+    // RISK REPORTS — onglets multiples sous une seule section
+    // =====================================================
+    let _riskTab = "challenges";  // onglet actif (persiste durant la session)
+    const RISK_TABS = [
+      ["challenges", "Challenge Vs Payouts"],
+      ["verticals", "Vertical Vs Payouts"],
+      ["earners", "Highest Earners"],
+      ["losers", "Comptes financés en perte"],
+      ["lossTime", "Revenue Loss Over Time"],
+      ["status", "Account Status Analysis"],
+      ["drawdown", "Drawdown Analysis"],
+    ];
+    window.setRiskTab = (k) => { _riskTab = k; render(); };
+
+    function viewRisk() {
+      const users = adminUsers();
+      const accounts = adminAccounts();
+      const pays = adminPayments();
+      const pct = (a, b) => b ? Math.round((a / b) * 100) : 0;
+
+      // --- ONGLETS HTML ---
+      const tabsBar = `<div class="risk-tabs">
+        ${RISK_TABS.map(([k, l]) => `<button class="${k === _riskTab ? 'active' : ''}" onclick="setRiskTab('${k}')">${l}</button>`).join("")}
+      </div>`;
+
+      // ============ Helpers communs ============
+      function groupByTier() {
+        const out = {};
+        for (const a of accounts) {
+          const key = (a.tier && a.tier.name) || "?";
+          if (!out[key]) out[key] = { name: key, vertical: a.vertical, capital: a.tier && a.tier.capital, accounts: [], passed: 0, failed: 0, funded: 0, active: 0 };
+          out[key].accounts.push(a);
+          if (a.phase === "funded") out[key].funded++;
+          else if (a.status === "passed") out[key].passed++;
+          else if (a.status === "failed") out[key].failed++;
+          else out[key].active++;
+        }
+        for (const k of Object.keys(out)) {
+          const t = out[k];
+          // Revenue : extrait des payments label "Challenge <name>"
+          t.revenue = pays.filter(p => p.dir === "out" && p.type === "Challenge" && p.label.match(new RegExp(`Challenge\\s+${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+·`))).reduce((s, p) => s + p.amount, 0);
+          // Payouts : retraits faits par les users qui ont ce tier en funded
+          const tierEmails = new Set(t.accounts.filter(a => a.phase === "funded").map(a => a._email));
+          t.payouts = pays.filter(p => p.dir === "in" && p.type === "Retrait" && tierEmails.has(p._email)).reduce((s, p) => s + p.amount, 0);
+          t.profitMargin = t.revenue - t.payouts;
+          t.payoutCount = pays.filter(p => p.dir === "in" && p.type === "Retrait" && tierEmails.has(p._email)).length;
+          t.payoutPct = t.funded ? Math.round((tierEmails.size > 0 ? t.payoutCount / t.funded : 0) * 100) : 0;
+        }
+        return Object.values(out);
+      }
+
+      // ============ Tab 1 : Challenge Vs Payouts ============
+      if (_riskTab === "challenges") {
+        const tiers = groupByTier().sort((a, b) => b.revenue - a.revenue);
+        const rows = tiers.map(t => [t.name, t.revenue, t.payouts, t.profitMargin, pct(t.profitMargin, t.revenue), t.payoutCount, t.payoutPct, t.funded]);
+        registerCsv("risk_challenges", "spovibe_risk_challenges.csv", ["Challenge", "Revenue", "Total Payouts", "Profit Margin", "Margin %", "Payout Count", "Payout %", "Funded Accounts"], rows);
+        return `${tabsBar}
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div>
+                <h3 style="margin:0;font-size:1.1rem;">Challenge Payout Statistics</h3>
+                <p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Performance économique par palier de challenge</p>
+              </div>
+              ${csvBtn("risk_challenges", "Export")}
+            </div>
+            ${tiers.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+              <thead><tr>
+                <th>Challenge Title</th><th>Revenue</th><th>Total Payouts (after split)</th><th>Profit Margin</th><th>Payout Count</th><th>Payout Percentage</th><th>Funded Accounts Count</th>
+              </tr></thead>
+              <tbody>${tiers.map(t => {
+                const marginPctTier = pct(t.profitMargin, t.revenue);
+                return `<tr>
+                  <td><b>${SF.escapeHtml(t.name)}</b><br><span class="muted" style="font-size:0.74rem;">${t.vertical === 'predictions' ? 'Prédictions' : 'Sports'} · ${fmt(t.capital || 0)}</span></td>
+                  <td><b>${fmt2(t.revenue)}</b></td>
+                  <td>${fmt2(t.payouts)}</td>
+                  <td><b style="color:${t.profitMargin >= 0 ? '#16a34a' : '#dc2626'};">${t.profitMargin >= 0 ? '+' : ''}${fmt2(t.profitMargin)}</b> <span class="muted" style="font-size:0.78rem;">(${marginPctTier}%)</span></td>
+                  <td>${t.payoutCount}</td>
+                  <td>${t.payoutPct}%</td>
+                  <td><span class="risk-pill ${t.funded > 0 ? 'pos' : 'neutral'}">${t.funded}</span></td>
+                </tr>`;
+              }).join("")}</tbody>
+            </table></div>` : '<p class="muted" style="padding:30px;text-align:center;">Aucune donnée par palier.</p>'}
+          </div>`;
+      }
+
+      // ============ Tab 2 : Vertical Vs Payouts ============
+      if (_riskTab === "verticals") {
+        const data = { sports: { revenue: 0, payouts: 0, funded: 0, count: 0, active: 0, passed: 0, failed: 0 }, predictions: { revenue: 0, payouts: 0, funded: 0, count: 0, active: 0, passed: 0, failed: 0 } };
+        for (const a of accounts) {
+          const v = a.vertical;
+          if (!data[v]) continue;
+          data[v].count++;
+          if (a.phase === "funded") data[v].funded++;
+          if (a.status === "passed") data[v].passed++;
+          if (a.status === "failed") data[v].failed++;
+          if (a.status === "active") data[v].active++;
+        }
+        for (const p of pays) {
+          if (p.dir === "out" && p.type === "Challenge") {
+            const v = /\(Sports\)/.test(p.label) ? "sports" : /\(Prédictions\)/.test(p.label) ? "predictions" : null;
+            if (v) data[v].revenue += p.amount;
+          }
+          if (p.dir === "in" && p.type === "Retrait") {
+            // Trouve la vertical active du user au moment du retrait (approximation : utilise leur vertical funded actuel)
+            const userAccs = accounts.filter(a => a._email === p._email && a.phase === "funded");
+            const v = userAccs[0] ? userAccs[0].vertical : null;
+            if (v && data[v]) data[v].payouts += p.amount;
+          }
+        }
+        const rows = [["sports", "Sports"], ["predictions", "Prédictions"]].map(([v, label]) => {
+          const d = data[v]; const margin = d.revenue - d.payouts;
+          return [label, d.revenue, d.payouts, margin, pct(margin, d.revenue), d.count, d.active, d.passed, d.failed, d.funded];
+        });
+        registerCsv("risk_verticals", "spovibe_risk_verticals.csv", ["Vertical", "Revenue", "Payouts", "Margin", "Margin %", "Total Accounts", "Active", "Passed", "Failed", "Funded"], rows);
+        return `${tabsBar}
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Vertical Payout Statistics</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Sports vs Prédictions — performance & distribution des comptes</p></div>
+              ${csvBtn("risk_verticals", "Export")}
+            </div>
+            <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+              <thead><tr><th>Vertical</th><th>Revenue</th><th>Payouts</th><th>Marge</th><th>Total comptes</th><th>Actifs</th><th>Réussis</th><th>Échoués</th><th>Financés</th></tr></thead>
+              <tbody>${rows.map(r => {
+                const margin = r[3]; const marginPctV = r[4];
+                return `<tr>
+                  <td><b>${r[0]}</b></td>
+                  <td><b>${fmt(r[1])}</b></td>
+                  <td>${fmt(r[2])}</td>
+                  <td><b style="color:${margin >= 0 ? '#16a34a' : '#dc2626'};">${margin >= 0 ? '+' : ''}${fmt(margin)}</b> <span class="muted" style="font-size:0.78rem;">(${marginPctV}%)</span></td>
+                  <td>${r[5]}</td>
+                  <td>${r[6]}</td>
+                  <td><span class="risk-pill pos">${r[7]}</span></td>
+                  <td><span class="risk-pill neg">${r[8]}</span></td>
+                  <td><span class="risk-pill warn">${r[9]}</span></td>
+                </tr>`;
+              }).join("")}</tbody>
+            </table></div>
+          </div>`;
+      }
+
+      // ============ Tab 3 : Highest Earners ============
+      if (_riskTab === "earners") {
+        const payoutsByUser = {};
+        for (const p of pays.filter(x => x.dir === "in" && x.type === "Retrait")) {
+          if (!payoutsByUser[p._email]) payoutsByUser[p._email] = { email: p._email, name: p._name, total: 0, count: 0, max: 0, firstAt: p.at, lastAt: p.at };
+          payoutsByUser[p._email].total += p.amount;
+          payoutsByUser[p._email].count++;
+          payoutsByUser[p._email].max = Math.max(payoutsByUser[p._email].max, p.amount);
+          payoutsByUser[p._email].firstAt = Math.min(payoutsByUser[p._email].firstAt, p.at);
+          payoutsByUser[p._email].lastAt = Math.max(payoutsByUser[p._email].lastAt, p.at);
+        }
+        // Ajoute le palier/vertical
+        for (const u of Object.values(payoutsByUser)) {
+          const accs = accounts.filter(a => a._email === u.email && a.phase === "funded");
+          u.tier = accs[0] ? accs[0].tier && accs[0].tier.name : "?";
+          u.vertical = accs[0] ? accs[0].vertical : "?";
+          u.profit = accs.reduce((s, a) => s + (a.balance - a.capital), 0);
+        }
+        const list = Object.values(payoutsByUser).sort((a, b) => b.total - a.total);
+        registerCsv("risk_earners", "spovibe_risk_earners.csv",
+          ["Email", "Nom", "Vertical", "Palier", "Total retiré", "Nb retraits", "Plus gros retrait", "Profit cycle", "1er retrait", "Dernier retrait"],
+          list.map(u => [u.email, u.name, u.vertical, u.tier, u.total, u.count, u.max, u.profit, fmtDate(u.firstAt), fmtDate(u.lastAt)])
+        );
+        return `${tabsBar}
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Highest Earners</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Traders avec le plus de retraits cumulés — top concentration de risque payout</p></div>
+              ${csvBtn("risk_earners", "Export")}
+            </div>
+            ${list.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+              <thead><tr><th>Trader</th><th>Vertical</th><th>Palier</th><th>Total retiré</th><th>Retraits</th><th>+ gros retrait</th><th>Profit cycle</th><th>Dernier retrait</th></tr></thead>
+              <tbody>${list.slice(0, 50).map(u => `<tr>
+                <td><b>${SF.escapeHtml(u.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(u.email)}</span></td>
+                <td>${u.vertical === 'predictions' ? 'Prédictions' : u.vertical === 'sports' ? 'Sports' : '?'}</td>
+                <td>${SF.escapeHtml(u.tier || '?')}</td>
+                <td><b style="color:#16a34a;">${fmt2(u.total)}</b></td>
+                <td>${u.count}</td>
+                <td>${fmt2(u.max)}</td>
+                <td class="${u.profit >= 0 ? 'pos' : 'neg'}">${u.profit >= 0 ? '+' : ''}${fmt2(u.profit)}</td>
+                <td class="muted">${fmtDate(u.lastAt)}</td>
+              </tr>`).join("")}</tbody>
+            </table></div>${list.length > 50 ? `<p class="muted" style="padding:14px;font-size:0.82rem;">Affichage des 50 premiers sur ${list.length} traders avec retraits. Export CSV complet disponible.</p>` : ""}` : '<p class="muted" style="padding:30px;text-align:center;">Aucun retrait effectué pour le moment.</p>'}
+          </div>`;
+      }
+
+      // ============ Tab 4 : Comptes financés en perte ============
+      if (_riskTab === "losers") {
+        const losers = accounts.filter(a => a.phase === "funded" && a.balance < a.capital).map(a => {
+          const ddPct = Math.round((1 - a.balance / a.capital) * 100);
+          return { email: a._email, name: a._name, vertical: a.vertical, tier: a.tier && a.tier.name, capital: a.capital, balance: a.balance, loss: a.capital - a.balance, ddPct, withdrawn: a.withdrawn || 0, fundedAt: a.fundedAt };
+        }).sort((a, b) => b.loss - a.loss);
+        registerCsv("risk_losers", "spovibe_risk_losers.csv",
+          ["Email", "Nom", "Vertical", "Palier", "Capital", "Solde", "Perte", "DD %", "Retiré"],
+          losers.map(l => [l.email, l.name, l.vertical, l.tier, l.capital, l.balance, l.loss, l.ddPct + "%", l.withdrawn])
+        );
+        const totalLoss = losers.reduce((s, l) => s + l.loss, 0);
+        return `${tabsBar}
+          <div class="adm-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+            <div class="adm-stat featured"><div class="k">Comptes en perte</div><div class="v">${losers.length}</div></div>
+            <div class="adm-stat"><div class="k">Perte cumulée</div><div class="v neg">${fmt2(totalLoss)}</div></div>
+            <div class="adm-stat"><div class="k">Perte moyenne</div><div class="v neg">${losers.length ? fmt2(totalLoss / losers.length) : '—'}</div></div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Comptes financés en perte</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Traders funded dont le solde est tombé sous le capital initial</p></div>
+              ${csvBtn("risk_losers", "Export")}
+            </div>
+            ${losers.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+              <thead><tr><th>Trader</th><th>Vertical</th><th>Palier</th><th>Capital</th><th>Solde</th><th>Perte</th><th>DD %</th><th>Déjà retiré</th></tr></thead>
+              <tbody>${losers.map(l => `<tr>
+                <td><b>${SF.escapeHtml(l.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(l.email)}</span></td>
+                <td>${l.vertical === 'predictions' ? 'Prédictions' : 'Sports'}</td>
+                <td>${SF.escapeHtml(l.tier || '?')}</td>
+                <td>${fmt(l.capital)}</td>
+                <td>${fmt2(l.balance)}</td>
+                <td><b style="color:#dc2626;">−${fmt2(l.loss)}</b></td>
+                <td><span class="risk-pill ${l.ddPct > 7 ? 'neg' : 'warn'}">${l.ddPct}%</span></td>
+                <td>${fmt2(l.withdrawn)}</td>
+              </tr>`).join("")}</tbody>
+            </table></div>` : '<p class="muted" style="padding:30px;text-align:center;">✓ Aucun compte financé en perte actuellement.</p>'}
+          </div>`;
+      }
+
+      // ============ Tab 5 : Revenue Loss Over Time ============
+      if (_riskTab === "lossTime") {
+        // On bucketise par semaine sur 90 jours (ou par mois si all-time)
+        const now = Date.now();
+        const buckets = {}; // key "ww/yyyy" → {revenue, payouts}
+        for (const p of pays) {
+          if (p.at < now - 365 * 86400000) continue;
+          const d = new Date(p.at);
+          const wk = Math.floor((d - new Date(d.getFullYear(), 0, 1)) / (7 * 86400000));
+          const key = `S${wk + 1} ${d.getFullYear()}`;
+          if (!buckets[key]) buckets[key] = { label: key, revenue: 0, payouts: 0, ts: p.at };
+          if (p.dir === "out" && p.type === "Challenge") buckets[key].revenue += p.amount;
+          if (p.dir === "in" && p.type === "Retrait") buckets[key].payouts += p.amount;
+        }
+        const series = Object.values(buckets).sort((a, b) => a.ts - b.ts);
+        const lossWeeks = series.filter(b => b.payouts > b.revenue);
+        registerCsv("risk_loss_time", "spovibe_risk_loss_time.csv", ["Semaine", "Revenue", "Payouts", "Net"], series.map(s => [s.label, s.revenue, s.payouts, s.revenue - s.payouts]));
+        return `${tabsBar}
+          <div class="adm-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+            <div class="adm-stat"><div class="k">Semaines en perte</div><div class="v ${lossWeeks.length > 0 ? 'neg' : 'pos'}">${lossWeeks.length}</div><div class="s">Sur ${series.length} dernières</div></div>
+            <div class="adm-stat"><div class="k">Pire semaine</div><div class="v neg">${lossWeeks.length ? fmt(Math.min(...lossWeeks.map(w => w.revenue - w.payouts))) : '—'}</div></div>
+            <div class="adm-stat featured"><div class="k">Net cumulé 12 mois</div><div class="v">${fmt(series.reduce((s, w) => s + w.revenue - w.payouts, 0))}</div></div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Revenue Loss Over Time</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Semaines où les payouts ont dépassé le revenue</p></div>
+              ${csvBtn("risk_loss_time", "Export")}
+            </div>
+            ${series.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:680px;">
+              <thead><tr><th>Semaine</th><th>Revenue</th><th>Payouts</th><th>Net</th><th>Statut</th></tr></thead>
+              <tbody>${series.slice(-26).reverse().map(b => {
+                const net = b.revenue - b.payouts;
+                return `<tr>
+                  <td><b>${b.label}</b></td>
+                  <td>${fmt(b.revenue)}</td>
+                  <td>${fmt(b.payouts)}</td>
+                  <td><b style="color:${net >= 0 ? '#16a34a' : '#dc2626'};">${net >= 0 ? '+' : ''}${fmt(net)}</b></td>
+                  <td><span class="risk-pill ${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? 'Profit' : 'Perte'}</span></td>
+                </tr>`;
+              }).join("")}</tbody>
+            </table></div>` : '<p class="muted" style="padding:30px;text-align:center;">Pas assez de données pour une analyse temporelle.</p>'}
+          </div>`;
+      }
+
+      // ============ Tab 6 : Account Status Analysis ============
+      if (_riskTab === "status") {
+        const buckets = { active: { count: 0, capital: 0, balance: 0 }, passed: { count: 0, capital: 0, balance: 0 }, failed: { count: 0, capital: 0, balance: 0 }, funded: { count: 0, capital: 0, balance: 0, withdrawn: 0 } };
+        for (const a of accounts) {
+          const k = a.phase === "funded" ? "funded" : a.status;
+          if (!buckets[k]) continue;
+          buckets[k].count++;
+          buckets[k].capital += a.capital;
+          buckets[k].balance += a.balance;
+          if (k === "funded") buckets[k].withdrawn += (a.withdrawn || 0);
+        }
+        const tot = buckets.active.count + buckets.passed.count + buckets.failed.count + buckets.funded.count;
+        const rows = Object.entries(buckets).map(([k, b]) => [k, b.count, pct(b.count, tot), b.capital, b.balance, b.balance - b.capital, k === "funded" ? b.withdrawn : "—"]);
+        registerCsv("risk_status", "spovibe_risk_status.csv", ["Statut", "Comptes", "Part %", "Capital total", "Solde total", "P&L cumulé", "Retiré"], rows);
+        const labels = { active: "En évaluation", passed: "Réussi (à activer)", failed: "Échoué", funded: "Financé" };
+        const colors = { active: "neutral", passed: "pos", failed: "neg", funded: "warn" };
+        return `${tabsBar}
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Account Status Analysis</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Distribution des comptes par statut + capital total et P&L cumulé</p></div>
+              ${csvBtn("risk_status", "Export")}
+            </div>
+            <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:780px;">
+              <thead><tr><th>Statut</th><th>Comptes</th><th>Part %</th><th>Capital total</th><th>Solde total</th><th>P&L cumulé</th><th>Retiré</th></tr></thead>
+              <tbody>${rows.map(r => {
+                const k = r[0]; const pnl = r[5];
+                return `<tr>
+                  <td><span class="risk-pill ${colors[k]}">${labels[k]}</span></td>
+                  <td><b>${r[1]}</b></td>
+                  <td>${r[2]}%</td>
+                  <td>${fmt(r[3])}</td>
+                  <td>${fmt(r[4])}</td>
+                  <td><b style="color:${pnl >= 0 ? '#16a34a' : '#dc2626'};">${pnl >= 0 ? '+' : ''}${fmt2(pnl)}</b></td>
+                  <td>${r[6] === "—" ? '—' : fmt2(r[6])}</td>
+                </tr>`;
+              }).join("")}</tbody>
+            </table></div>
+          </div>`;
+      }
+
+      // ============ Tab 7 : Drawdown Analysis ============
+      if (_riskTab === "drawdown") {
+        const finished = accounts.filter(a => a.status === "passed" || a.status === "failed" || a.phase === "funded");
+        if (!finished.length) return `${tabsBar}<div class="card center" style="padding:46px;"><p class="muted">Pas encore de challenges terminés à analyser.</p></div>`;
+        const withDD = finished.map(a => {
+          const minBalance = Math.min(a.capital, ...((a.bets || []).map(b => null).filter(Boolean)));
+          // Calcule le DD à partir des bets : approximation depuis peak vs lowest balance observé
+          const ddPctActual = a.peak ? Math.round((1 - Math.min(a.balance, a.capital) / a.peak) * 100) : 0;
+          return {
+            email: a._email, name: a._name, vertical: a.vertical, tier: a.tier && a.tier.name,
+            status: a.phase === "funded" ? "funded" : a.status,
+            ddPct: ddPctActual,
+            ddAllowed: a.tier && a.tier.maxDD || 0,
+            ddUsage: a.tier && a.tier.maxDD ? Math.round(ddPctActual / a.tier.maxDD * 100) : 0,
+            profitPct: a.capital ? Math.round((a.balance - a.capital) / a.capital * 100) : 0,
+          };
+        });
+        const list = withDD.sort((a, b) => b.ddPct - a.ddPct);
+        registerCsv("risk_drawdown", "spovibe_risk_drawdown.csv", ["Email", "Nom", "Vertical", "Palier", "Statut", "DD %", "DD autorisé %", "Usage DD %", "Profit %"], list.map(d => [d.email, d.name, d.vertical, d.tier, d.status, d.ddPct, d.ddAllowed, d.ddUsage + "%", d.profitPct + "%"]));
+        const avgDD = Math.round(withDD.reduce((s, d) => s + d.ddPct, 0) / withDD.length);
+        const avgUsage = Math.round(withDD.reduce((s, d) => s + d.ddUsage, 0) / withDD.length);
+        return `${tabsBar}
+          <div class="adm-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+            <div class="adm-stat featured"><div class="k">DD moyen utilisé</div><div class="v">${avgDD}%</div></div>
+            <div class="adm-stat"><div class="k">% du DD autorisé consommé</div><div class="v">${avgUsage}%</div><div class="s">Cible saine : < 80%</div></div>
+            <div class="adm-stat"><div class="k">Comptes au plafond</div><div class="v neg">${withDD.filter(d => d.ddUsage >= 90).length}</div><div class="s">Usage ≥ 90%</div></div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <div><h3 style="margin:0;font-size:1.1rem;">Drawdown Analysis</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Drawdown consommé par compte vs DD autorisé du palier</p></div>
+              ${csvBtn("risk_drawdown", "Export")}
+            </div>
+            <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+              <thead><tr><th>Trader</th><th>Vertical</th><th>Palier</th><th>Statut</th><th>DD réel</th><th>DD autorisé</th><th>Usage</th><th>Profit cycle</th></tr></thead>
+              <tbody>${list.slice(0, 50).map(d => `<tr>
+                <td><b>${SF.escapeHtml(d.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(d.email)}</span></td>
+                <td>${d.vertical === 'predictions' ? 'Prédictions' : 'Sports'}</td>
+                <td>${SF.escapeHtml(d.tier || '?')}</td>
+                <td><span class="risk-pill ${d.status === 'funded' ? 'warn' : d.status === 'passed' ? 'pos' : 'neg'}">${d.status === 'funded' ? 'Financé' : d.status === 'passed' ? 'Réussi' : 'Échoué'}</span></td>
+                <td><b>${d.ddPct}%</b></td>
+                <td class="muted">${d.ddAllowed}%</td>
+                <td><span class="risk-pill ${d.ddUsage >= 90 ? 'neg' : d.ddUsage >= 70 ? 'warn' : 'pos'}">${d.ddUsage}%</span></td>
+                <td class="${d.profitPct >= 0 ? 'pos' : 'neg'}">${d.profitPct >= 0 ? '+' : ''}${d.profitPct}%</td>
+              </tr>`).join("")}</tbody>
+            </table></div>
+          </div>`;
+      }
+
+      return `${tabsBar}<p class="muted">Onglet inconnu.</p>`;
+    }
+
+    const VIEWS = { dashboard: viewDashboard, analytics: viewAnalytics, risk: viewRisk, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
 
     function current() { const h = (location.hash || "#dashboard").slice(1); return VIEWS[h] ? h : "dashboard"; }
     function go(sec) { location.hash = sec; }
@@ -846,7 +1227,7 @@
       if (window.SpovibeAuth) {
         await new Promise(r => setTimeout(r, 200));  // laisse l'auth Supabase s'initialiser
         if (!SF.currentUser()) {
-          view.innerHTML = '<div class="card center" style="padding:60px;"><h3>Pas connecté</h3><p class="muted" style="margin-top:10px;">Connecte-toi avec ton compte admin Supabase via <a href="login.html">/login</a>, puis reviens ici.</p></div>';
+          view.innerHTML = '<div class="card center" style="padding:60px;"><h3>Pas connecté</h3><p class="muted" style="margin-top:10px;">Connexion requise avec un compte admin Supabase via <a href="login.html">/login</a>.</p></div>';
           return;
         }
         const ok = await loadAdminData();
