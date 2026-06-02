@@ -65,6 +65,7 @@
   <script src="assets/sb-config.js"></script>
   <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
+  <script src="assets/polymarket.js"></script>
   <script>
     // ----- Accès admin : géré par RLS Supabase (table public.admins) -----
     // Plus de mot de passe en clair. Si l'utilisateur connecté n'est pas
@@ -77,6 +78,7 @@
       dash:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
       analyt:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-9"/><path d="M17 6h4v4"/></svg>',
       risk:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 22h20L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><circle cx="12" cy="18" r="0.8" fill="currentColor"/></svg>',
+      poly:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
       users:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
       eval:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
       funded:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4z"/></svg>',
@@ -88,6 +90,7 @@
       ["dashboard", "Vue d'ensemble", I.dash],
       ["analytics", "Analyse", I.analyt],
       ["risk", "Rapports de risque", I.risk],
+      ["polymarket", "Polymarket", I.poly],
       ["users", "Utilisateurs", I.users],
       ["evals", "Évaluations en cours", I.eval],
       ["funded", "Comptes financés", I.funded],
@@ -99,6 +102,7 @@
       dashboard: ["Vue d'ensemble", "KPI globaux du système Spovibe"],
       analytics: ["Analyse", "Funnel, marges, pass rate, cohortes et séries temporelles"],
       risk: ["Rapports de risque", "Analyse détaillée des risques par palier, vertical et profil trader"],
+      polymarket: ["Polymarket", "Sync des marchés et résolution des positions ouvertes"],
       users: ["Utilisateurs", "Tous les comptes enregistrés"],
       evals: ["Évaluations en cours", "Challenges actifs en phase d'évaluation"],
       funded: ["Comptes financés", "Traders en phase funded avec leur P&L"],
@@ -1190,7 +1194,160 @@
       return `${tabsBar}<p class="muted">Onglet inconnu.</p>`;
     }
 
-    const VIEWS = { dashboard: viewDashboard, analytics: viewAnalytics, risk: viewRisk, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
+    // ============= POLYMARKET ADMIN VIEW =============
+    let _polyOpenPositions = [];
+    let _polySyncState = "idle"; // "idle" | "syncing" | "settling"
+    let _polyLastResult = null;
+
+    async function loadPolymarketAdminData() {
+      try {
+        const c = SpovibeAuth.client();
+        const { data, error } = await c.from("predictions_positions").select("*").order("opened_at", { ascending: false });
+        if (error) return false;
+        _polyOpenPositions = data || [];
+        return true;
+      } catch (e) { return false; }
+    }
+
+    window.polySync = async () => {
+      _polySyncState = "syncing"; render();
+      try {
+        SpovibePolymarket.clearCache();
+        const markets = await SpovibePolymarket.getMarkets({ bypassCache: true });
+        _polyLastResult = { type: "sync", markets: markets.length, at: Date.now() };
+      } catch (e) {
+        _polyLastResult = { type: "sync", error: e.message, at: Date.now() };
+      }
+      _polySyncState = "idle"; render();
+    };
+
+    window.polySettleAll = async () => {
+      _polySyncState = "settling"; render();
+      try {
+        const r = await SpovibePolymarket.adminSettleAllPositions();
+        await loadPolymarketAdminData();
+        _polyLastResult = Object.assign({ type: "settle", at: Date.now() }, r);
+      } catch (e) {
+        _polyLastResult = { type: "settle", error: e.message, at: Date.now() };
+      }
+      _polySyncState = "idle"; render();
+    };
+
+    function viewPolymarket() {
+      // On charge en arrière-plan à la 1re visite, mais on render immédiatement
+      if (!_polyOpenPositions.length && _polySyncState === "idle") {
+        loadPolymarketAdminData().then(() => render());
+      }
+      const open = _polyOpenPositions.filter(p => p.status === "open");
+      const settled = _polyOpenPositions.filter(p => p.status !== "open");
+      const totalStaked = open.reduce((s, p) => s + Number(p.stake), 0);
+      const totalShares = open.reduce((s, p) => s + Number(p.shares), 0);
+
+      // Distribution par catégorie
+      const byCat = {};
+      for (const p of open) byCat[p.category || "other"] = (byCat[p.category || "other"] || 0) + 1;
+
+      // CSV
+      registerCsv("poly_open", "spovibe_polymarket_open_positions.csv",
+        ["User ID", "Marché", "Catégorie", "Side", "Prix entrée", "Mise", "Shares", "Ouverte le", "End date"],
+        open.map(p => [p.user_id, p.market_question, p.category, p.side, p.price_at_entry, p.stake, p.shares, p.opened_at, p.end_date])
+      );
+      registerCsv("poly_settled", "spovibe_polymarket_settled_positions.csv",
+        ["User ID", "Marché", "Side", "Outcome", "Status", "Mise", "Payout", "Settled at"],
+        settled.map(p => [p.user_id, p.market_question, p.side, p.resolved_outcome, p.status, p.stake, p.payout, p.settled_at])
+      );
+
+      let resultBanner = "";
+      if (_polyLastResult) {
+        const r = _polyLastResult;
+        if (r.type === "sync") {
+          resultBanner = r.error
+            ? `<div class="card" style="padding:12px 16px;border-left:4px solid #dc2626;margin-bottom:16px;"><b>Erreur sync :</b> ${SF.escapeHtml(r.error)}</div>`
+            : `<div class="card" style="padding:12px 16px;border-left:4px solid #16a34a;margin-bottom:16px;"><b>✓ Sync terminé :</b> ${r.markets} marchés rapatriés depuis Polymarket.</div>`;
+        } else if (r.type === "settle") {
+          resultBanner = r.error
+            ? `<div class="card" style="padding:12px 16px;border-left:4px solid #dc2626;margin-bottom:16px;"><b>Erreur settle :</b> ${SF.escapeHtml(r.error)}</div>`
+            : `<div class="card" style="padding:12px 16px;border-left:4px solid #16a34a;margin-bottom:16px;"><b>✓ ${r.settled} position(s) réglée(s).</b> ${r.errors ? r.errors + ' erreurs.' : ''} Le crédit des comptes user nécessite encore une Edge Function (Phase D).</div>`;
+        }
+      }
+
+      return `
+        ${resultBanner}
+        <div class="adm-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+          <div class="adm-stat featured"><div class="k">Positions ouvertes</div><div class="v">${open.length}</div></div>
+          <div class="adm-stat"><div class="k">Total misé</div><div class="v">${fmt2(totalStaked)}</div></div>
+          <div class="adm-stat"><div class="k">Shares en jeu</div><div class="v">${fmt2(totalShares)}</div><div class="s">Payout max si toutes gagnent</div></div>
+          <div class="adm-stat"><div class="k">Positions réglées</div><div class="v">${settled.length}</div></div>
+        </div>
+
+        <div class="card" style="padding:18px;margin-bottom:18px;">
+          <h3 style="margin:0 0 6px;">Synchronisation Polymarket</h3>
+          <p class="muted" style="margin:0 0 14px;font-size:0.86rem;">L'API Gamma est interrogée en direct côté client. Le cache local TTL est de 10 minutes. Pour les positions, le settlement vérifie chaque marché ouvert et met à jour celles qui sont résolues.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="polySync()" ${_polySyncState !== 'idle' ? 'disabled' : ''}>
+              ${_polySyncState === 'syncing' ? 'Sync en cours…' : 'Resync prices now'}
+            </button>
+            <button class="btn btn-ghost" onclick="polySettleAll()" ${_polySyncState !== 'idle' || !open.length ? 'disabled' : ''}>
+              ${_polySyncState === 'settling' ? 'Règlement en cours…' : `Settle resolved markets (${open.length})`}
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="gap:16px;">
+          <div class="card" style="padding:18px;">
+            <h3 style="margin:0 0 10px;">Distribution catégories (open)</h3>
+            ${Object.keys(byCat).length ? `<table class="history" style="width:100%;font-size:0.86rem;"><thead><tr><th>Catégorie</th><th>Positions</th></tr></thead><tbody>${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([cat, n]) => `<tr><td><b>${SF.escapeHtml(cat)}</b></td><td>${n}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucune position ouverte.</p>'}
+          </div>
+          <div class="card" style="padding:18px;">
+            <h3 style="margin:0 0 10px;">Catégories Polymarket dispos</h3>
+            <p class="muted" style="font-size:0.82rem;margin:0 0 10px;">${SpovibePolymarket.categoriesList().map(c => `<span style="display:inline-block;background:var(--bg-2);padding:4px 10px;border-radius:99px;margin:3px 4px 0 0;font-size:0.76rem;font-weight:600;">${SF.escapeHtml(c.label)}</span>`).join("")}</p>
+            <p class="muted" style="font-size:0.8rem;margin:0;">Les marchés sans tag de cette liste tombent en catégorie "Autres".</p>
+          </div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden;margin-top:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+            <div><h3 style="margin:0;">Positions ouvertes</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Toutes les positions Polymarket non encore réglées</p></div>
+            ${csvBtn("poly_open", "Export")}
+          </div>
+          ${open.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
+            <thead><tr><th>User</th><th>Marché</th><th>Catégorie</th><th>Side</th><th>Prix</th><th>Mise</th><th>Shares</th><th>End date</th></tr></thead>
+            <tbody>${open.slice(0, 50).map(p => `<tr>
+              <td class="muted" style="font-size:0.78rem;">${SF.escapeHtml(p.user_id.slice(0, 8))}…</td>
+              <td><b>${SF.escapeHtml(p.market_question)}</b></td>
+              <td>${SF.escapeHtml(p.category || 'other')}</td>
+              <td><span class="risk-pill ${p.side === 'Yes' ? 'pos' : 'neg'}">${p.side}</span></td>
+              <td>${Math.round(Number(p.price_at_entry) * 100)}¢</td>
+              <td>${fmt2(p.stake)}</td>
+              <td>${fmt2(p.shares)}</td>
+              <td class="muted">${p.end_date ? fmtDate(new Date(p.end_date).getTime()) : '—'}</td>
+            </tr>`).join("")}</tbody>
+          </table></div>${open.length > 50 ? `<p class="muted" style="padding:14px;font-size:0.82rem;">50 affichées sur ${open.length}. Export CSV complet dispo.</p>` : ''}` : '<p class="muted" style="padding:30px;text-align:center;">Aucune position ouverte pour le moment.</p>'}
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden;margin-top:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+            <div><h3 style="margin:0;">Positions réglées</h3></div>
+            ${csvBtn("poly_settled", "Export")}
+          </div>
+          ${settled.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:880px;">
+            <thead><tr><th>User</th><th>Marché</th><th>Side</th><th>Outcome</th><th>Statut</th><th>Mise</th><th>Payout</th><th>Settled</th></tr></thead>
+            <tbody>${settled.slice(0, 50).map(p => `<tr>
+              <td class="muted" style="font-size:0.78rem;">${SF.escapeHtml(p.user_id.slice(0, 8))}…</td>
+              <td><b>${SF.escapeHtml(p.market_question)}</b></td>
+              <td>${p.side}</td>
+              <td>${SF.escapeHtml(p.resolved_outcome || '—')}</td>
+              <td><span class="risk-pill ${p.status === 'won' ? 'pos' : p.status === 'cancelled' ? 'warn' : 'neg'}">${p.status}</span></td>
+              <td>${fmt2(p.stake)}</td>
+              <td><b style="color:${Number(p.payout) > 0 ? '#16a34a' : '#dc2626'};">${fmt2(Number(p.payout))}</b></td>
+              <td class="muted">${p.settled_at ? fmtDate(new Date(p.settled_at).getTime()) : '—'}</td>
+            </tr>`).join("")}</tbody>
+          </table></div>` : '<p class="muted" style="padding:30px;text-align:center;">Aucune position réglée encore.</p>'}
+        </div>
+      `;
+    }
+
+    const VIEWS = { dashboard: viewDashboard, analytics: viewAnalytics, risk: viewRisk, polymarket: viewPolymarket, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
 
     function current() { const h = (location.hash || "#dashboard").slice(1); return VIEWS[h] ? h : "dashboard"; }
     function go(sec) { location.hash = sec; }

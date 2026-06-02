@@ -38,6 +38,7 @@
   <script src="assets/sb-config.js"></script>
   <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
+  <script src="assets/polymarket.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="assets/certificate.js" defer></script>
   <script>
@@ -485,69 +486,16 @@
     }
 
     /* ---------- Marchés prédictifs (Polymarket) ---------- */
-    let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null;
-    const MOCK_PM_MARKETS = [
-      { id: "mk1", title: "Donald Trump élu en 2028 ?", category: "Politique", endDate: "2028-11-05T00:00:00Z", volume: 8400000, yesPrice: 0.42, noPrice: 0.58, source: "Démo" },
-      { id: "mk2", title: "Bitcoin au-dessus de 200 000 $ avant 2027 ?", category: "Crypto", endDate: "2027-01-01T00:00:00Z", volume: 5200000, yesPrice: 0.18, noPrice: 0.82, source: "Démo" },
-      { id: "mk3", title: "PSG vainqueur de la Ligue des Champions 2026 ?", category: "Sport", endDate: "2026-06-01T00:00:00Z", volume: 3100000, yesPrice: 0.22, noPrice: 0.78, source: "Démo" },
-      { id: "mk4", title: "OpenAI lèvera plus de 50 Md$ en 2026 ?", category: "Tech", endDate: "2026-12-31T00:00:00Z", volume: 2700000, yesPrice: 0.68, noPrice: 0.32, source: "Démo" },
-      { id: "mk5", title: "Récession américaine déclarée en 2026 ?", category: "Économie", endDate: "2026-12-31T00:00:00Z", volume: 4600000, yesPrice: 0.31, noPrice: 0.69, source: "Démo" },
-      { id: "mk6", title: "France championne du monde 2026 ?", category: "Sport", endDate: "2026-07-19T00:00:00Z", volume: 1900000, yesPrice: 0.15, noPrice: 0.85, source: "Démo" },
-      { id: "mk7", title: "Apple Vision Pro 2 annoncé en 2026 ?", category: "Tech", endDate: "2026-12-31T00:00:00Z", volume: 980000, yesPrice: 0.52, noPrice: 0.48, source: "Démo" },
-      { id: "mk8", title: "Taylor Swift annonce un nouvel album en 2026 ?", category: "Culture", endDate: "2026-12-31T00:00:00Z", volume: 1200000, yesPrice: 0.41, noPrice: 0.59, source: "Démo" },
-    ];
-    async function loadPolymarket() {
-      if (pmLoading || pmMarkets) return;
+    let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "volume24hr";
+    async function loadPolymarket(force) {
+      if (pmLoading) return;
       pmLoading = true; pmError = null;
-      // L'API Polymarket ne renvoie pas l'en-tête CORS pour les origines tierces.
-      // En démo on tente plusieurs proxies CORS publics en cascade.
-      // En production : remplacer par un Worker Cloudflare ou une Vercel Function (5 lignes).
-      const pmUrl = "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=24&order=volume24hr&ascending=false";
-      const PROXIES = [
-        u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-        u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-        u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
-        u => "https://thingproxy.freeboard.io/fetch/" + u,
-      ];
-      let data = null, lastErr = null;
-      for (const make of PROXIES) {
-        try {
-          const res = await fetch(make(pmUrl));
-          if (!res.ok) { lastErr = "HTTP " + res.status; continue; }
-          data = await res.json();
-          lastErr = null;
-          break;
-        } catch (e) { lastErr = e.message || "réseau"; }
-      }
-      if (!data) {
-        pmError = lastErr || "tous les proxies ont échoué";
-        pmMarkets = MOCK_PM_MARKETS;
-        pmLoading = false;
-        if (current() === "predictions") render();
-        return;
-      }
       try {
-        pmMarkets = data.map(m => {
-          let outcomes = m.outcomes, prices = m.outcomePrices;
-          try { if (typeof outcomes === "string") outcomes = JSON.parse(outcomes); } catch (e) {}
-          try { if (typeof prices === "string") prices = JSON.parse(prices); } catch (e) {}
-          outcomes = outcomes || ["Yes", "No"]; prices = prices || ["0.5", "0.5"];
-          const yesIdx = outcomes.findIndex(o => /^(yes|oui)$/i.test(o));
-          const yesPrice = yesIdx >= 0 ? Number(prices[yesIdx]) : Number(prices[0]);
-          return {
-            id: String(m.id),
-            title: m.question || m.groupItemTitle || "Marché",
-            image: m.image || m.icon || null,
-            category: m.category || "Divers",
-            endDate: m.endDate || m.endDateIso || null,
-            volume: Number(m.volumeNum || m.volume || 0),
-            yesPrice, noPrice: 1 - yesPrice,
-            slug: m.slug, source: "Polymarket"
-          };
-        }).filter(m => m.yesPrice > 0 && m.yesPrice < 1).slice(0, 24);
+        // Module SpovibePolymarket (assets/polymarket.js) — fetch direct Gamma API + cache 10 min
+        pmMarkets = await SpovibePolymarket.getMarkets({ bypassCache: !!force });
       } catch (e) {
-        pmError = e.message || "réseau";
-        pmMarkets = MOCK_PM_MARKETS;
+        pmError = e.message || "Polymarket inaccessible";
+        pmMarkets = pmMarkets || [];
       }
       pmLoading = false;
       if (current() === "predictions") render();
@@ -605,7 +553,7 @@
 
       let info = "";
       if (pmLoading && !pmMarkets) info = `<div class="pm-loading">Chargement des marchés depuis Polymarket…</div>`;
-      if (pmError && pmMarkets) info = `<div class="pm-warn">⚠ API Polymarket inaccessible (${SF.escapeHtml(pmError)}). Affichage de marchés de démonstration. <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:4px 10px;" onclick="pmRefresh()">Réessayer</button></div>`;
+      if (pmError) info = `<div class="pm-warn">⚠ API Polymarket inaccessible (${SF.escapeHtml(pmError)}). <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:4px 10px;" onclick="pmRefresh()">Réessayer</button></div>`;
 
       let slipHtml = "";
       if (isActive && pmSlip) {
@@ -613,7 +561,7 @@
         const sideClass = pmSlip.side === "YES" ? "yes" : "no";
         slipHtml = `<div class="pm-slip">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ta position</b><button class="btn btn-ghost btn-sm" onclick="pmClear()">Annuler</button></div>
-          <div class="pm-slip-q">${SF.escapeHtml(pmSlip.title)}</div>
+          <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
           <div class="pm-slip-side ${sideClass}">${pmSlip.side} · ${Math.round(pmSlip.price * 100)}¢</div>
           <div class="alert error" id="pmAlert"></div>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
@@ -632,27 +580,54 @@
 
       if (!pmMarkets) return header + stats + info;
 
-      const cats = ["all", ...Array.from(new Set(pmMarkets.map(m => m.category)))];
-      const catsHtml = `<div class="pm-cats">${cats.map(c => `<button class="pm-cat ${c === pmCategory ? 'active' : ''}" onclick="pmSetCat('${c}')">${c === 'all' ? 'Tous' : SF.escapeHtml(c)}</button>`).join("")}</div>`;
+      // Catégories Spovibe avec counts
+      const catStats = SpovibePolymarket.categoryStats(pmMarkets);
+      const totalCount = catStats.reduce((s, c) => s + c.count, 0);
+      const catsHtml = `<div class="pm-cats">
+        <button class="pm-cat ${pmCategory === 'all' ? 'active' : ''}" onclick="pmSetCat('all')">Tous (${totalCount})</button>
+        ${catStats.filter(c => c.count > 0).map(c => `<button class="pm-cat ${c.slug === pmCategory ? 'active' : ''}" onclick="pmSetCat('${c.slug}')">${SF.escapeHtml(c.label)} (${c.count})</button>`).join("")}
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input class="input" style="flex:1;min-width:200px;" placeholder="Rechercher un marché…" value="${SF.escapeHtml(pmSearch)}" oninput="pmSetSearch(this.value)">
+        <select class="input" style="flex:0 0 200px;" onchange="pmSetSort(this.value)">
+          <option value="volume24hr" ${pmSort === 'volume24hr' ? 'selected' : ''}>Volume 24 h ↓</option>
+          <option value="volume" ${pmSort === 'volume' ? 'selected' : ''}>Volume total ↓</option>
+          <option value="endDate" ${pmSort === 'endDate' ? 'selected' : ''}>Fin proche ↑</option>
+          <option value="liquidity" ${pmSort === 'liquidity' ? 'selected' : ''}>Liquidité ↓</option>
+        </select>
+      </div>`;
 
-      const filtered = pmCategory === "all" ? pmMarkets : pmMarkets.filter(m => m.category === pmCategory);
+      let filtered = pmCategory === "all" ? pmMarkets : pmMarkets.filter(m => m.category === pmCategory);
+      if (pmSearch) {
+        const q = pmSearch.toLowerCase().trim();
+        filtered = filtered.filter(m => (m.question || "").toLowerCase().includes(q) || (m.eventTitle || "").toLowerCase().includes(q));
+      }
+      if (pmSort === "volume24hr") filtered = filtered.slice().sort((a, b) => b.volume24hr - a.volume24hr);
+      else if (pmSort === "volume") filtered = filtered.slice().sort((a, b) => b.volume - a.volume);
+      else if (pmSort === "endDate") filtered = filtered.slice().sort((a, b) => (a.endDateMs || Infinity) - (b.endDateMs || Infinity));
+      else if (pmSort === "liquidity") filtered = filtered.slice().sort((a, b) => b.liquidity - a.liquidity);
+      filtered = filtered.slice(0, 60);  // cap d'affichage
+
       const fmtVol = v => v >= 1e6 ? (v / 1e6).toFixed(1) + " M$" : v >= 1e3 ? (v / 1e3).toFixed(0) + " k$" : Math.round(v) + " $";
       const fmtEnd = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
       // En mode locked, les boutons YES/NO renvoient à l'achat de challenge
       const onYes = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','YES')`;
       const onNo  = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','NO')`;
-      const cards = filtered.map(m => `<div class="pm-card ${pmSlip && pmSlip.marketId === m.id ? 'sel' : ''}" ${locked ? 'title="Lance ton challenge Prédictions pour parier"' : ''}>
-        <div class="pm-h">
-          <div class="pm-img">${m.image ? `<img src="${m.image}" alt="" onerror="this.parentNode.textContent='${(m.title[0] || '?').toUpperCase()}'"/>` : (m.title[0] || '?').toUpperCase()}</div>
-          <div class="pm-meta">${SF.escapeHtml(m.category)}${m.endDate ? ' · ' + fmtEnd(m.endDate) : ''}</div>
-        </div>
-        <h4>${SF.escapeHtml(m.title)}</h4>
-        <div class="pm-prices">
-          <button class="pm-yes" onclick="${onYes(m)}">YES ${Math.round(m.yesPrice * 100)}¢</button>
-          <button class="pm-no" onclick="${onNo(m)}">NO ${Math.round(m.noPrice * 100)}¢</button>
-        </div>
-        <div class="pm-foot"><span>Vol. ${fmtVol(m.volume)}</span><span>${SF.escapeHtml(m.source)}</span></div>
-      </div>`).join("");
+      const cards = filtered.map(m => {
+        const firstLetter = (m.question && m.question[0]) ? m.question[0].toUpperCase() : '?';
+        return `<div class="pm-card ${pmSlip && pmSlip.marketId === m.id ? 'sel' : ''}" ${locked ? 'title="Lance ton challenge Prédictions pour parier"' : ''}>
+          <div class="pm-h">
+            <div class="pm-img">${m.image ? `<img src="${m.image}" alt="" onerror="this.parentNode.textContent='${firstLetter}'"/>` : firstLetter}</div>
+            <div class="pm-meta">${SF.escapeHtml(m.categoryLabel || 'Autres')}${m.endDate ? ' · ' + fmtEnd(m.endDate) : ''}</div>
+          </div>
+          <h4>${SF.escapeHtml(m.question)}</h4>
+          <div class="pm-prices">
+            <button class="pm-yes" onclick="${onYes(m)}">YES ${Math.round(m.yesPrice * 100)}¢</button>
+            <button class="pm-no" onclick="${onNo(m)}">NO ${Math.round(m.noPrice * 100)}¢</button>
+          </div>
+          <div class="pm-foot"><span>Vol. ${fmtVol(m.volume)}</span><span>Polymarket</span></div>
+        </div>`;
+      }).join("");
 
       const footNote = locked
         ? `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Marchés en direct depuis <b style="color:var(--text)">Polymarket</b>. <a href="challenges.html?v=predictions" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour trader avec une bankroll jusqu'à 100 000 €.</p>`
@@ -1113,11 +1088,24 @@
       alert(`${r.results.length} ${unit} réglé(s) : ${won} gagné(s). Résultat net : ${(net >= 0 ? '+' : '')}${SF.fmt2(net)}.`); render();
     };
     // Marchés prédictifs
-    window.pmPickSide = (id, side) => { const m = pmMarkets.find(x => x.id === id); if (!m) return; pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, title: m.title }; render(); };
+    window.pmPickSide = (id, side) => { const m = pmMarkets.find(x => x.id === id); if (!m) return; pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question }; render(); };
     window.pmClear = () => { pmSlip = null; render(); };
-    window.pmConfirm = () => { const acc = SF.predictionsAccount(); const al = document.getElementById("pmAlert"); const r = SF.placePrediction(acc, { marketId: pmSlip.marketId, marketTitle: pmSlip.title, side: pmSlip.side, price: pmSlip.price, stake: Number(document.getElementById("pmStake").value) }); if (r.error) { al.textContent = r.error; al.classList.add("show"); return; } pmSlip = null; render(); };
+    window.pmConfirm = async () => {
+      const al = document.getElementById("pmAlert"); al.classList.remove("show");
+      const stake = Number(document.getElementById("pmStake").value);
+      if (!stake || stake <= 0) { al.textContent = "Indique une mise."; al.classList.add("show"); return; }
+      const r = await SpovibePolymarket.placePosition({
+        marketId: pmSlip.marketId,
+        side: pmSlip.side === "YES" ? "Yes" : "No",
+        stake,
+      });
+      if (r.error) { al.textContent = r.error; al.classList.add("show"); return; }
+      pmSlip = null; render();
+    };
     window.pmSetCat = cat => { pmCategory = cat; render(); };
-    window.pmRefresh = () => { pmMarkets = null; pmError = null; render(); };
+    window.pmSetSearch = q => { pmSearch = q; render(); };
+    window.pmSetSort = s => { pmSort = s; render(); };
+    window.pmRefresh = () => { pmMarkets = null; pmError = null; SpovibePolymarket.clearCache(); loadPolymarket(true); };
     let betResult = "win";
     window.setResult = r => { betResult = r; document.getElementById("segWin").classList.toggle("active", r === "win"); document.getElementById("segLose").classList.toggle("active", r === "lose"); };
     window.onBet = e => { e.preventDefault(); const acc = SF.sportsAccount(); const al = document.getElementById("betAlert"); const res = SF.placeBet(acc, { event: document.getElementById("bEvent").value, stake: document.getElementById("bStake").value, odds: document.getElementById("bOdds").value, result: betResult }); if (res.error) { al.textContent = res.error; al.classList.add("show"); return false; } betResult = "win"; render(); return false; };
