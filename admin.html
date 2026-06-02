@@ -56,6 +56,7 @@
     // ----- Icônes -----
     const I = {
       dash:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      analyt:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-9"/><path d="M17 6h4v4"/></svg>',
       users:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 .01M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
       eval:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>',
       funded:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0V4z"/></svg>',
@@ -65,6 +66,7 @@
     };
     const SECTIONS = [
       ["dashboard", "Vue d'ensemble", I.dash],
+      ["analytics", "Analytics", I.analyt],
       ["users", "Utilisateurs", I.users],
       ["evals", "Évaluations en cours", I.eval],
       ["funded", "Comptes financés", I.funded],
@@ -74,6 +76,7 @@
     ];
     const TITLES = {
       dashboard: ["Vue d'ensemble", "KPI globaux du système Spovibe"],
+      analytics: ["Analytics", "Funnel, marges, pass rate, cohortes et séries temporelles"],
       users: ["Utilisateurs", "Tous les comptes enregistrés"],
       evals: ["Évaluations en cours", "Challenges actifs en phase d'évaluation"],
       funded: ["Comptes financés", "Traders en phase funded avec leur P&L"],
@@ -349,7 +352,371 @@
         </tr>`).join("")}</tbody></table></div>`;
     }
 
-    const VIEWS = { dashboard: viewDashboard, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
+    // =====================================================
+    // ANALYTICS — helpers + view
+    // =====================================================
+
+    // CSV export depuis n'importe quelle structure rows[] + headers[]
+    function downloadCsv(filename, headers, rows) {
+      const esc = v => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+      };
+      const csv = [headers.join(","), ...rows.map(r => r.map(esc).join(","))].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    }
+    window._csvData = {};
+    function csvBtn(key, label) {
+      return `<button class="pill-sel ghost" style="font-size:0.78rem;padding:5px 12px;" onclick="(function(){const d=window._csvData['${key}'];if(d)downloadCsv(d.filename,d.headers,d.rows);})()">⬇ ${label || 'CSV'}</button>`;
+    }
+    function registerCsv(key, filename, headers, rows) {
+      window._csvData[key] = { filename, headers, rows };
+    }
+
+    // Mini SVG bar chart pour séries temporelles
+    function svgBarChart(values, labels, opts) {
+      opts = opts || {};
+      const w = opts.width || 360, h = opts.height || 110;
+      const pad = { t: 8, r: 6, b: 22, l: 30 };
+      const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+      const max = Math.max(1, ...values);
+      const barW = cw / values.length * 0.78;
+      const step = cw / values.length;
+      const fmt = opts.fmt || (n => n);
+      const color = opts.color || "var(--orange)";
+      let bars = "";
+      for (let i = 0; i < values.length; i++) {
+        const v = values[i];
+        const bh = (v / max) * ch;
+        const x = pad.l + i * step + (step - barW) / 2;
+        const y = pad.t + ch - bh;
+        bars += `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="2" fill="${color}" opacity="${v ? 0.9 : 0.15}"><title>${labels[i]}: ${fmt(v)}</title></rect>`;
+      }
+      // axe Y : 0 + max
+      const axis = `<line x1="${pad.l}" y1="${pad.t + ch}" x2="${pad.l + cw}" y2="${pad.t + ch}" stroke="var(--border)" stroke-width="1"/>
+        <text x="${pad.l - 4}" y="${pad.t + 4}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt(max)}</text>
+        <text x="${pad.l - 4}" y="${pad.t + ch + 3}" text-anchor="end" font-size="9" fill="var(--muted)">0</text>`;
+      // étiquettes X : premier et dernier
+      const xLabels = `<text x="${pad.l}" y="${h - 6}" font-size="9" fill="var(--muted)">${labels[0] || ''}</text>
+        <text x="${pad.l + cw}" y="${h - 6}" text-anchor="end" font-size="9" fill="var(--muted)">${labels[labels.length - 1] || ''}</text>`;
+      return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">${axis}${bars}${xLabels}</svg>`;
+    }
+
+    // Buckets temporels : retourne { values: [n,n,n...], labels: ["jj/mm",...] }
+    function bucketize(items, getTime, periodDays, granularity) {
+      const now = Date.now();
+      const start = periodDays === null ? Math.min(...items.map(getTime).filter(t => t > 0), now) : now - periodDays * 86400000;
+      const span = now - start;
+      // granularity = "day" pour ≤90j, "week" pour 90-365, "month" pour all-time
+      const bucketMs = granularity === "month" ? 30 * 86400000 : granularity === "week" ? 7 * 86400000 : 86400000;
+      const n = Math.max(1, Math.ceil(span / bucketMs));
+      const values = new Array(n).fill(0);
+      for (const it of items) {
+        const t = getTime(it);
+        if (t < start || t > now) continue;
+        const idx = Math.min(n - 1, Math.floor((t - start) / bucketMs));
+        values[idx] += (it._weight != null ? it._weight : 1);
+      }
+      const labels = [];
+      for (let i = 0; i < n; i++) {
+        const d = new Date(start + i * bucketMs);
+        labels.push(granularity === "month" ? `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}` : `${d.getDate()}/${d.getMonth() + 1}`);
+      }
+      return { values, labels };
+    }
+
+    // Cohort key: "2026-06" depuis un timestamp
+    function cohortKey(ts) {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    function cohortLabel(key) {
+      const [y, m] = key.split("-");
+      const months = ["Janv", "Févr", "Mars", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc"];
+      return `${months[parseInt(m, 10) - 1]} ${y}`;
+    }
+
+    function viewAnalytics() {
+      const users = adminUsers();         // [{name, email, created}]
+      const accounts = adminAccounts();   // [{_email,_name,vertical,tier,phase,status,capital,balance,peak,withdrawn,fundedAt,bets,pending}]
+      const pays = adminPayments();       // [{_email,_name,at,type,amount,dir,label}]
+
+      // ---------- 1. FUNNEL ----------
+      const nSignups = users.length;
+      const buyersSet = new Set(accounts.map(a => a._email));
+      const nBuyers = buyersSet.size;
+      const passedAccs = accounts.filter(a => a.status === "passed" || a.phase === "funded");
+      const passedEmails = new Set(passedAccs.map(a => a._email));
+      const nPassed = passedEmails.size;
+      const fundedEmails = new Set(accounts.filter(a => a.phase === "funded").map(a => a._email));
+      const nFunded = fundedEmails.size;
+      const withdrawerEmails = new Set(pays.filter(p => p.type === "Retrait" && p.dir === "in").map(p => p._email));
+      const nWithdrew = withdrawerEmails.size;
+      const pct = (a, b) => b ? Math.round((a / b) * 100) : 0;
+
+      const funnel = [
+        { k: "Inscriptions", v: nSignups, sub: "Total — base utilisateurs Supabase" },
+        { k: "Acheteurs", v: nBuyers, sub: `${pct(nBuyers, nSignups)}% des inscrits` },
+        { k: "Évaluations réussies", v: nPassed, sub: `${pct(nPassed, nBuyers)}% des acheteurs` },
+        { k: "Comptes financés", v: nFunded, sub: `${pct(nFunded, nPassed)}% des réussis` },
+        { k: "Traders payés (≥1 retrait)", v: nWithdrew, sub: `${pct(nWithdrew, nFunded)}% des financés` },
+      ];
+      registerCsv("funnel", "spovibe_analytics_funnel.csv", ["Étape", "Nombre", "Conversion"], funnel.map(s => [s.k, s.v, s.sub]));
+      const funnelHtml = `
+        <div class="card" style="padding:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div><h3 style="margin:0;">Funnel acquisition</h3><p class="muted" style="margin:2px 0 0;font-size:0.84rem;">Inscriptions → Retraits, sur l'ensemble du temps</p></div>
+            ${csvBtn("funnel", "Export CSV")}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:stretch;">
+            ${funnel.map((s, i) => `
+              <div style="background:linear-gradient(135deg,rgba(124,107,246,${0.08 + i * 0.04}),rgba(124,107,246,${0.04 + i * 0.02}));border:1px solid var(--border);border-radius:14px;padding:14px 12px;">
+                <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:700;margin-bottom:8px;">${s.k}</div>
+                <div style="font-size:1.6rem;font-weight:800;font-family:var(--font);letter-spacing:-0.02em;">${s.v}</div>
+                <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;">${s.sub}</div>
+              </div>`).join("")}
+          </div>
+        </div>`;
+
+      // ---------- 2. REVENUE / PAYOUTS / MARGE ----------
+      const revenue = pays.filter(p => p.dir === "out" && p.type === "Challenge").reduce((s, p) => s + p.amount, 0);
+      const payouts = pays.filter(p => p.dir === "in" && p.type === "Retrait").reduce((s, p) => s + p.amount, 0);
+      const margin = revenue - payouts;
+      const marginPct = revenue ? Math.round((margin / revenue) * 100) : 0;
+      const exposureFunded = accounts.filter(a => a.phase === "funded").reduce((s, a) => s + a.capital, 0);
+      const provisionPayouts = accounts.filter(a => a.phase === "funded").reduce((s, a) => s + Math.max(0, a.balance - a.capital), 0);
+
+      // Revenue par palier
+      const revByTier = {};
+      for (const p of pays.filter(x => x.dir === "out" && x.type === "Challenge")) {
+        // Extrait tier du label "Challenge <name> · ..."
+        const m = p.label.match(/Challenge\s+(.+?)\s+·/);
+        const tier = m ? m[1] : "Inconnu";
+        revByTier[tier] = (revByTier[tier] || 0) + p.amount;
+      }
+      const revByTierRows = Object.entries(revByTier).sort((a, b) => b[1] - a[1]).map(([t, v]) => [t, fmt(v), pct(v, revenue) + "%"]);
+      registerCsv("rev_by_tier", "spovibe_analytics_revenue_par_palier.csv", ["Palier", "Revenue", "% du total"], revByTierRows);
+
+      // Revenue par vertical
+      const revByVert = { sports: 0, predictions: 0 };
+      for (const p of pays.filter(x => x.dir === "out" && x.type === "Challenge")) {
+        const v = /\(Sports\)/.test(p.label) ? "sports" : /\(Prédictions\)/.test(p.label) ? "predictions" : null;
+        if (v) revByVert[v] += p.amount;
+      }
+
+      const moneyHtml = `
+        <div class="card" style="padding:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div><h3 style="margin:0;">Revenue, payouts & marge</h3><p class="muted" style="margin:2px 0 0;font-size:0.84rem;">Encaissements challenges vs versements traders</p></div>
+            ${csvBtn("rev_by_tier", "Export par palier")}
+          </div>
+          <div class="adm-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:16px;">
+            <div class="adm-stat featured"><div class="k">Revenue</div><div class="v">${fmt(revenue)}</div><div class="s">Frais d'évaluation</div></div>
+            <div class="adm-stat"><div class="k">Payouts versés</div><div class="v" style="color:var(--green)">${fmt(payouts)}</div><div class="s">Retraits effectifs</div></div>
+            <div class="adm-stat"><div class="k">Marge brute</div><div class="v ${margin >= 0 ? 'pos' : 'neg'}">${margin >= 0 ? '+' : ''}${fmt(margin)}</div><div class="s">Revenue − payouts</div></div>
+            <div class="adm-stat"><div class="k">Marge %</div><div class="v ${marginPct >= 0 ? 'pos' : 'neg'}">${marginPct}%</div><div class="s">Sur revenue</div></div>
+            <div class="adm-stat"><div class="k">Exposition</div><div class="v">${fmt(exposureFunded)}</div><div class="s">Capital comptes financés</div></div>
+            <div class="adm-stat"><div class="k">Provision payouts</div><div class="v" style="color:var(--orange)">${fmt(provisionPayouts)}</div><div class="s">Profits non retirés</div></div>
+          </div>
+          <div class="grid grid-2" style="gap:16px;">
+            <div>
+              <h4 style="margin:0 0 8px;">Revenue par palier</h4>
+              ${revByTierRows.length ? `<table class="history" style="width:100%;font-size:0.86rem;"><thead><tr><th>Palier</th><th>Revenue</th><th>%</th></tr></thead><tbody>${revByTierRows.map(r => `<tr><td><b>${SF.escapeHtml(r[0])}</b></td><td>${r[1]}</td><td class="muted">${r[2]}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucun revenue.</p>'}
+            </div>
+            <div>
+              <h4 style="margin:0 0 8px;">Revenue par vertical</h4>
+              <table class="history" style="width:100%;font-size:0.86rem;"><thead><tr><th>Vertical</th><th>Revenue</th><th>%</th></tr></thead><tbody>
+                <tr><td><b>Sports</b></td><td>${fmt(revByVert.sports)}</td><td class="muted">${pct(revByVert.sports, revenue)}%</td></tr>
+                <tr><td><b>Prédictions</b></td><td>${fmt(revByVert.predictions)}</td><td class="muted">${pct(revByVert.predictions, revenue)}%</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>`;
+
+      // ---------- 3. PASS RATE ----------
+      const finished = accounts.filter(a => a.status === "passed" || a.status === "failed" || a.phase === "funded");
+      const passedTotal = finished.filter(a => a.status === "passed" || a.phase === "funded").length;
+      const failedTotal = finished.filter(a => a.status === "failed").length;
+      const passRate = finished.length ? Math.round((passedTotal / finished.length) * 100) : 0;
+      // Par palier
+      const byTier = {};
+      for (const a of finished) {
+        const tn = (a.tier && a.tier.name) || "?";
+        byTier[tn] = byTier[tn] || { name: tn, passed: 0, failed: 0 };
+        if (a.status === "failed") byTier[tn].failed++;
+        else byTier[tn].passed++;
+      }
+      const tierRows = Object.values(byTier).map(t => {
+        const tot = t.passed + t.failed;
+        return [t.name, t.passed, t.failed, tot, tot ? Math.round(t.passed / tot * 100) + "%" : "—"];
+      });
+      registerCsv("pass_by_tier", "spovibe_analytics_pass_rate_palier.csv", ["Palier", "Réussis", "Échoués", "Total terminés", "Pass rate"], tierRows);
+      // Par vertical
+      const byVert = { sports: { p: 0, f: 0 }, predictions: { p: 0, f: 0 } };
+      for (const a of finished) {
+        const v = a.vertical || (a.tier && a.tier.vertical) || "sports";
+        if (a.status === "failed") byVert[v].f++; else byVert[v].p++;
+      }
+      // Durée moyenne d'une éval réussie / drawdown / profit %
+      const passedFinished = finished.filter(a => a.status === "passed" || a.phase === "funded");
+      const avgProfitPct = passedFinished.length ? Math.round(passedFinished.reduce((s, a) => s + ((a.balance - a.capital) / a.capital * 100), 0) / passedFinished.length) : 0;
+
+      const passHtml = `
+        <div class="card" style="padding:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div><h3 style="margin:0;">Pass rate des évaluations</h3><p class="muted" style="margin:2px 0 0;font-size:0.84rem;">Sur ${finished.length} évaluation${finished.length > 1 ? 's' : ''} terminée${finished.length > 1 ? 's' : ''}</p></div>
+            ${csvBtn("pass_by_tier", "Export par palier")}
+          </div>
+          <div class="adm-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+            <div class="adm-stat featured"><div class="k">Pass rate global</div><div class="v">${passRate}%</div><div class="s">${passedTotal} / ${finished.length}</div></div>
+            <div class="adm-stat"><div class="k">Réussis (passed + funded)</div><div class="v pos">${passedTotal}</div></div>
+            <div class="adm-stat"><div class="k">Échoués</div><div class="v neg">${failedTotal}</div></div>
+            <div class="adm-stat"><div class="k">Profit moyen sur réussis</div><div class="v pos">+${avgProfitPct}%</div><div class="s">% du capital initial</div></div>
+          </div>
+          <div class="grid grid-2" style="gap:16px;">
+            <div>
+              <h4 style="margin:0 0 8px;">Pass rate par palier</h4>
+              ${tierRows.length ? `<table class="history" style="width:100%;font-size:0.86rem;"><thead><tr><th>Palier</th><th>Réussis</th><th>Échoués</th><th>Total</th><th>Pass rate</th></tr></thead><tbody>${tierRows.map(r => `<tr><td><b>${SF.escapeHtml(r[0])}</b></td><td class="pos">${r[1]}</td><td class="neg">${r[2]}</td><td>${r[3]}</td><td><b>${r[4]}</b></td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucune évaluation terminée.</p>'}
+            </div>
+            <div>
+              <h4 style="margin:0 0 8px;">Pass rate par vertical</h4>
+              <table class="history" style="width:100%;font-size:0.86rem;"><thead><tr><th>Vertical</th><th>Réussis</th><th>Échoués</th><th>Pass rate</th></tr></thead><tbody>
+                ${["sports", "predictions"].map(v => { const r = byVert[v]; const tot = r.p + r.f; return `<tr><td><b>${v === 'sports' ? 'Sports' : 'Prédictions'}</b></td><td class="pos">${r.p}</td><td class="neg">${r.f}</td><td><b>${tot ? Math.round(r.p / tot * 100) + '%' : '—'}</b></td></tr>`; }).join("")}
+              </tbody></table>
+            </div>
+          </div>
+        </div>`;
+
+      // ---------- 4. COHORTES PAR MOIS ----------
+      const cohorts = {};
+      for (const u of users) {
+        const k = cohortKey(u.created);
+        cohorts[k] = cohorts[k] || { users: 0, buyers: new Set(), passed: new Set(), funded: new Set(), revenue: 0, payouts: 0 };
+        cohorts[k].users++;
+      }
+      const emailToCohort = {};
+      for (const u of users) emailToCohort[u.email] = cohortKey(u.created);
+      for (const a of accounts) {
+        const k = emailToCohort[a._email];
+        if (!k || !cohorts[k]) continue;
+        cohorts[k].buyers.add(a._email);
+        if (a.status === "passed" || a.phase === "funded") cohorts[k].passed.add(a._email);
+        if (a.phase === "funded") cohorts[k].funded.add(a._email);
+      }
+      for (const p of pays) {
+        const k = emailToCohort[p._email];
+        if (!k || !cohorts[k]) continue;
+        if (p.dir === "out" && p.type === "Challenge") cohorts[k].revenue += p.amount;
+        if (p.dir === "in" && p.type === "Retrait") cohorts[k].payouts += p.amount;
+      }
+      const cohortRows = Object.entries(cohorts).sort((a, b) => b[0].localeCompare(a[0])).map(([k, c]) => {
+        const net = c.revenue - c.payouts;
+        return [cohortLabel(k), c.users, c.buyers.size, pct(c.buyers.size, c.users) + "%", c.passed.size, c.funded.size, fmt(c.revenue), fmt(c.payouts), fmt(net)];
+      });
+      registerCsv("cohorts", "spovibe_analytics_cohortes.csv", ["Mois", "Inscrits", "Acheteurs", "Buyer%", "Réussis", "Financés", "Revenue", "Payouts", "Net"], cohortRows);
+
+      const cohortsHtml = `
+        <div class="card" style="padding:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div><h3 style="margin:0;">Cohortes par mois d'inscription</h3><p class="muted" style="margin:2px 0 0;font-size:0.84rem;">Qualité économique de chaque vague d'utilisateurs</p></div>
+            ${csvBtn("cohorts", "Export CSV")}
+          </div>
+          ${cohortRows.length ? `<div style="overflow-x:auto;"><table class="history" style="min-width:760px;font-size:0.86rem;"><thead><tr><th>Mois</th><th>Inscrits</th><th>Acheteurs</th><th>Buyer %</th><th>Réussis</th><th>Financés</th><th>Revenue</th><th>Payouts</th><th>Net</th></tr></thead><tbody>${cohortRows.map(r => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td class="muted">${r[3]}</td><td class="pos">${r[4]}</td><td class="pos">${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td class="${parseFloat(r[8]) >= 0 ? 'pos' : 'neg'}"><b>${r[8]}</b></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Aucune cohorte.</p>'}
+        </div>`;
+
+      // ---------- 5. SÉRIES TEMPORELLES ----------
+      const sUsers = users.map(u => ({ at: u.created, _weight: 1 }));
+      const sRev = pays.filter(p => p.dir === "out" && p.type === "Challenge").map(p => ({ at: p.at, _weight: p.amount }));
+      const sPay = pays.filter(p => p.dir === "in" && p.type === "Retrait").map(p => ({ at: p.at, _weight: p.amount }));
+      const periods = [
+        { d: 7, label: "7 derniers jours", gran: "day" },
+        { d: 30, label: "30 derniers jours", gran: "day" },
+        { d: 90, label: "90 derniers jours", gran: "week" },
+        { d: null, label: "All-time", gran: "month" },
+      ];
+      function chartCard(title, series, period, color, fmt) {
+        const b = bucketize(series, x => x.at, period.d, period.gran);
+        const sum = series.reduce((s, x) => s + (x._weight || 1), 0);
+        return `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:6px;">${period.label}</div>
+          <div style="font-size:1.1rem;font-weight:800;font-family:var(--font);margin-bottom:8px;">${fmt(sum)}</div>
+          ${svgBarChart(b.values, b.labels, { color, fmt })}
+        </div>`;
+      }
+      function chartRow(title, series, color, valueFmt) {
+        return `<div style="margin-bottom:18px;">
+          <h4 style="margin:0 0 10px;">${title}</h4>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+            ${periods.map(p => chartCard(title, series, p, color, valueFmt)).join("")}
+          </div>
+        </div>`;
+      }
+      const seriesHtml = `
+        <div class="card" style="padding:18px;">
+          <h3 style="margin:0 0 14px;">Séries temporelles</h3>
+          ${chartRow("Inscriptions", sUsers, "var(--lavande)", n => `${Math.round(n)}`)}
+          ${chartRow("Revenue (€)", sRev, "#22c55e", n => fmt(Math.round(n)))}
+          ${chartRow("Payouts (€)", sPay, "#f97316", n => fmt(Math.round(n)))}
+        </div>`;
+
+      // ---------- 6. TOP TRADERS & ALERTES ----------
+      const traders = accounts.filter(a => a.phase === "funded").map(a => ({
+        email: a._email, name: a._name, vertical: a.vertical, tier: a.tier && a.tier.name, balance: a.balance, capital: a.capital, profit: a.balance - a.capital, withdrawn: a.withdrawn || 0,
+      }));
+      const topByBalance = [...traders].sort((a, b) => b.balance - a.balance).slice(0, 10);
+      const topByWithdrawn = [...traders].sort((a, b) => b.withdrawn - a.withdrawn).slice(0, 5);
+      const fundedLoss = traders.filter(t => t.balance < t.capital).sort((a, b) => a.profit - b.profit);
+
+      registerCsv("top_balance", "spovibe_analytics_top_traders.csv", ["Email", "Nom", "Vertical", "Palier", "Solde", "Capital", "Profit", "Retiré"], topByBalance.map(t => [t.email, t.name, t.vertical, t.tier, t.balance, t.capital, t.profit, t.withdrawn]));
+
+      const tradersHtml = `
+        <div class="grid grid-2" style="gap:16px;">
+          <div class="card" style="padding:18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <h3 style="margin:0;">Top 10 soldes</h3>
+              ${csvBtn("top_balance", "CSV")}
+            </div>
+            ${topByBalance.length ? `<table class="history" style="width:100%;font-size:0.84rem;"><thead><tr><th>Trader</th><th>Palier</th><th>Solde</th><th>Profit</th></tr></thead><tbody>${topByBalance.map(t => `<tr><td><b>${SF.escapeHtml(t.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(t.email)}</span></td><td>${SF.escapeHtml(t.tier || '?')}</td><td>${fmt2(t.balance)}</td><td class="${t.profit >= 0 ? 'pos' : 'neg'}">${t.profit >= 0 ? '+' : ''}${fmt2(t.profit)}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucun compte financé.</p>'}
+          </div>
+          <div class="card" style="padding:18px;">
+            <h3 style="margin:0 0 10px;">Top 5 retraits cumulés</h3>
+            ${topByWithdrawn.length ? `<table class="history" style="width:100%;font-size:0.84rem;"><thead><tr><th>Trader</th><th>Palier</th><th>Total retiré</th></tr></thead><tbody>${topByWithdrawn.map(t => `<tr><td><b>${SF.escapeHtml(t.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(t.email)}</span></td><td>${SF.escapeHtml(t.tier || '?')}</td><td><b>${fmt2(t.withdrawn)}</b></td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucun retrait pour l\'instant.</p>'}
+          </div>
+        </div>
+        ${fundedLoss.length ? `<div class="card" style="padding:18px;border-left:4px solid var(--orange);">
+          <h3 style="margin:0 0 10px;">⚠ Comptes financés en perte (${fundedLoss.length})</h3>
+          <p class="muted" style="margin:0 0 12px;font-size:0.84rem;">Solde < capital initial — surveille la concentration de risque.</p>
+          <table class="history" style="width:100%;font-size:0.84rem;"><thead><tr><th>Trader</th><th>Palier</th><th>Solde</th><th>Perte cycle</th></tr></thead><tbody>${fundedLoss.slice(0, 10).map(t => `<tr><td><b>${SF.escapeHtml(t.name)}</b><br><span class="muted" style="font-size:0.74rem;">${SF.escapeHtml(t.email)}</span></td><td>${SF.escapeHtml(t.tier || '?')}</td><td>${fmt2(t.balance)}</td><td class="neg"><b>${fmt2(t.profit)}</b></td></tr>`).join("")}</tbody></table>
+        </div>` : ""}`;
+
+      // ---------- 7. ALERTES SANTÉ ----------
+      const alerts = [];
+      if (revenue > 0 && marginPct < 0) alerts.push({ level: "danger", msg: `Marge brute négative (${marginPct}%). Vos payouts dépassent vos encaissements.` });
+      else if (revenue > 5000 && marginPct < 20) alerts.push({ level: "warn", msg: `Marge brute faible (${marginPct}%). Cible saine prop firm : 40-60%.` });
+      if (finished.length >= 5 && passRate > 25) alerts.push({ level: "warn", msg: `Pass rate élevé (${passRate}%). Cible saine : 8-15%. Vos challenges sont peut-être trop faciles.` });
+      if (finished.length >= 5 && passRate < 3) alerts.push({ level: "warn", msg: `Pass rate très faible (${passRate}%). Aucun trader ne réussit, la beta va décrocher.` });
+      if (traders.length >= 3 && fundedLoss.length / Math.max(1, traders.length) > 0.5) alerts.push({ level: "warn", msg: `${Math.round(fundedLoss.length / traders.length * 100)}% de comptes financés en perte. Concentration de risque à surveiller.` });
+      if (revenue > 0 && exposureFunded > revenue * 3) alerts.push({ level: "warn", msg: `Exposition (${fmt(exposureFunded)}) très supérieure au revenue (${fmt(revenue)}). Risque de payouts cumulés > marge.` });
+      const alertsHtml = alerts.length ? `<div class="card" style="padding:14px 18px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border-color:var(--orange);"><h3 style="margin:0 0 10px;color:var(--orange);">Alertes santé</h3>${alerts.map(a => `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;${alerts.length > 1 ? 'border-bottom:1px solid rgba(0,0,0,0.05);' : ''}"><div style="font-size:1.1rem;line-height:1;">${a.level === 'danger' ? '🔴' : '⚠'}</div><div style="font-size:0.9rem;">${a.msg}</div></div>`).join("")}</div>` : `<div class="card center" style="padding:14px 18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-color:var(--green);"><span style="color:var(--green);font-weight:700;">✓ Aucune alerte santé — KPIs dans les clous.</span></div>`;
+
+      // ---------- LAYOUT FINAL ----------
+      return `<div style="display:flex;flex-direction:column;gap:18px;">
+        ${alertsHtml}
+        ${funnelHtml}
+        ${moneyHtml}
+        ${passHtml}
+        ${cohortsHtml}
+        ${seriesHtml}
+        ${tradersHtml}
+      </div>`;
+    }
+
+    const VIEWS = { dashboard: viewDashboard, analytics: viewAnalytics, users: viewUsers, evals: viewEvals, funded: viewFunded, payments: viewPayments, messages: viewMessages, communities: viewCommunities };
 
     function current() { const h = (location.hash || "#dashboard").slice(1); return VIEWS[h] ? h : "dashboard"; }
     function go(sec) { location.hash = sec; }
