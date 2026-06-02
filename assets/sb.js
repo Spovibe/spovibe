@@ -40,11 +40,18 @@
         .select("name,created_at")
         .eq("id", user.id)
         .maybeSingle();
+      // Détecte si l'utilisateur est admin (via RPC is_admin sécurisé côté Postgres)
+      let isAdmin = false;
+      try {
+        const { data: adminFlag } = await client().rpc("is_admin");
+        isAdmin = !!adminFlag;
+      } catch (e) { /* RPC absente ou non autorisée → user normal */ }
       const userObj = {
         id: user.id,
         email: user.email,
         name: (profile && profile.name) || (user.user_metadata && user.user_metadata.name) || (user.email || "").split("@")[0],
         created: profile && profile.created_at ? new Date(profile.created_at).getTime() : Date.now(),
+        isAdmin,
       };
       setCachedUser(userObj);
       return userObj;

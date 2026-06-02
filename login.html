@@ -55,6 +55,8 @@
           document.getElementById("password").value
         );
         if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        // Admin → console admin direct. User normal → espace ou challenges.
+        if (SF.isAdmin()) { location.href = "admin.html"; return; }
         const acc = SF.getAccount();
         location.href = acc ? "espace.html" : "challenges.html";
       } finally {

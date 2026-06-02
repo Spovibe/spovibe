@@ -151,6 +151,12 @@
     return getUsers()[email] || null;
   }
 
+  // Vrai si l'utilisateur connecté est dans la table public.admins (Supabase)
+  function isAdmin() {
+    const u = currentUser();
+    return !!(u && u.isAdmin);
+  }
+
   /* ----------------------------------------------------------
      Comptes / Challenges — structure multi-vertical
      accounts[email] = { sports: account|null, predictions: account|null }
@@ -902,30 +908,52 @@
      ---------------------------------------------------------- */
   function renderNav(active) {
     const u = currentUser();
-    const links = [
-      { href: "index.html", label: "Accueil" },
-      { href: "arena.html", label: "Arena" },
-      { href: "index.html#challenges", label: "Challenges" },
-      { href: "index.html#about", label: "À propos" },
-      { href: "index.html#faq", label: "FAQ" },
-      { href: "contact.html", label: "Contact" },
-    ];
+    const admin = isAdmin();
+    // Pour les admins, on garde uniquement les liens vitrine + bouton vers admin console.
+    // L'admin n'est pas un parieur : pas de challenges, pas d'arena, pas d'espace membre.
+    const links = admin
+      ? [
+          { href: "index.html", label: "Accueil" },
+          { href: "contact.html", label: "Contact" },
+        ]
+      : [
+          { href: "index.html", label: "Accueil" },
+          { href: "arena.html", label: "Arena" },
+          { href: "index.html#challenges", label: "Challenges" },
+          { href: "index.html#about", label: "À propos" },
+          { href: "index.html#faq", label: "FAQ" },
+          { href: "contact.html", label: "Contact" },
+        ];
     const navLinks = links.map(l => `<a href="${l.href}">${l.label}</a>`).join("");
-    const actions = u
-      ? `<a class="btn btn-ghost btn-sm" href="espace.html">Espace membre</a>
-         <button class="btn btn-primary btn-sm" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>`
-      : `<a class="btn btn-ghost btn-sm" href="login.html">Connexion</a>
+    let actions;
+    if (admin) {
+      actions = `<a class="btn btn-ghost btn-sm" href="admin.html">Admin console</a>
+         <button class="btn btn-primary btn-sm" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>`;
+    } else if (u) {
+      actions = `<a class="btn btn-ghost btn-sm" href="espace.html">Espace membre</a>
+         <button class="btn btn-primary btn-sm" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>`;
+    } else {
+      actions = `<a class="btn btn-ghost btn-sm" href="login.html">Connexion</a>
          <a class="btn btn-primary btn-sm" href="challenges.html">Commencer</a>`;
+    }
     // Auth visible aussi dans le burger mobile (caché en desktop)
-    const mobileAuth = u
-      ? `<div class="nav-mobile-auth">
+    let mobileAuth;
+    if (admin) {
+      mobileAuth = `<div class="nav-mobile-auth">
+           <a class="btn btn-ghost btn-block" href="admin.html">Admin console</a>
+           <button class="btn btn-primary btn-block" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>
+         </div>`;
+    } else if (u) {
+      mobileAuth = `<div class="nav-mobile-auth">
            <a class="btn btn-ghost btn-block" href="espace.html">Espace membre</a>
            <button class="btn btn-primary btn-block" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>
-         </div>`
-      : `<div class="nav-mobile-auth">
+         </div>`;
+    } else {
+      mobileAuth = `<div class="nav-mobile-auth">
            <a class="btn btn-ghost btn-block" href="login.html">Connexion</a>
            <a class="btn btn-primary btn-block" href="challenges.html">Commencer</a>
          </div>`;
+    }
     return `
     <nav class="nav">
       <div class="container nav-inner">
@@ -958,7 +986,7 @@
 
   global.SF = {
     TIERS, TIERS_SPORTS, TIERS_PREDICTIONS, ALL_TIERS, tierById, DIVS,
-    signup, login, logout, currentUser, dataReady,
+    signup, login, logout, currentUser, isAdmin, dataReady,
     getAccount, sportsAccount, predictionsAccount, activeAccounts,
     startChallenge, saveAccount, resetAccount,
     placeBet, claimFunded, withdraw, stats, combinedStats, countDays,
