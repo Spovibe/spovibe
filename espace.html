@@ -563,13 +563,13 @@
         slipHtml = `<div class="pm-slip">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ta position</b><button class="btn btn-ghost btn-sm" onclick="pmClear()">Annuler</button></div>
           <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
-          <div class="pm-slip-side ${sideClass}">${pmSlip.side} · ${Math.round(pmSlip.price * 100)}¢</div>
+          <div class="pm-slip-side ${sideClass}">${SF.escapeHtml(pmSlip.label || pmSlip.side)} · ${Math.round(pmSlip.price * 100)}¢</div>
           <div class="alert error" id="pmAlert"></div>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
             <div class="field" style="margin:0;flex:1;min-width:160px;"><label>Mise (€) · max ${SF.fmt(maxStake)}</label><input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}"></div>
             <button class="btn btn-primary" onclick="pmConfirm()">Placer la position</button>
           </div>
-          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${pmSlip.side}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
+          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${SF.escapeHtml(pmSlip.label || pmSlip.side)}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
         </div>`;
       }
 
@@ -623,8 +623,8 @@
           </div>
           <h4>${SF.escapeHtml(m.question)}</h4>
           <div class="pm-prices">
-            <button class="pm-yes" onclick="${onYes(m)}">YES ${Math.round(m.yesPrice * 100)}¢</button>
-            <button class="pm-no" onclick="${onNo(m)}">NO ${Math.round(m.noPrice * 100)}¢</button>
+            <button class="pm-yes" onclick="${onYes(m)}">${SF.escapeHtml(m.yesLabel || 'Oui')} · ${Math.round(m.yesPrice * 100)}¢</button>
+            <button class="pm-no" onclick="${onNo(m)}">${SF.escapeHtml(m.noLabel || 'Non')} · ${Math.round(m.noPrice * 100)}¢</button>
           </div>
           <div class="pm-foot"><span>Vol. ${fmtVol(m.volume)}</span><span>Polymarket</span></div>
         </div>`;
@@ -1089,7 +1089,12 @@
       alert(`${r.results.length} ${unit} réglé(s) : ${won} gagné(s). Résultat net : ${(net >= 0 ? '+' : '')}${SF.fmt2(net)}.`); render();
     };
     // Marchés prédictifs
-    window.pmPickSide = (id, side) => { const m = pmMarkets.find(x => x.id === id); if (!m) return; pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question }; render(); };
+    window.pmPickSide = (id, side) => {
+      const m = pmMarkets.find(x => x.id === id); if (!m) return;
+      const label = side === "YES" ? (m.yesLabel || "Oui") : (m.noLabel || "Non");
+      pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question, label };
+      render();
+    };
     window.pmClear = () => { pmSlip = null; render(); };
     window.pmConfirm = async () => {
       const al = document.getElementById("pmAlert"); al.classList.remove("show");

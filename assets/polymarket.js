@@ -88,7 +88,7 @@
   }
 
   // Mappe un marché Gamma (depuis /events) vers le format interne Spovibe.
-  // Le 2e arg event apporte tags + image fallback.
+  // Le 2e arg event apporte tags + image fallback + détection contestants.
   function normalize(m, event) {
     event = event || {};
     const outcomes = parseField(m.outcomes, ["Yes", "No"]);
@@ -103,6 +103,31 @@
         category = cat.slug; categoryLabel = cat.label; break;
       }
     }
+
+    // Labels YES/NO intelligents :
+    // - Si groupItemTitle est défini ET l'event a EXACTEMENT 1 autre sous-marché
+    //   avec un groupItemTitle valide → choix binaire (ex tennis Mensik vs Fonseca)
+    //   YES = ce contestant, NO = l'autre.
+    // - Sinon : "Oui" / "Non" en français.
+    const groupItemTitle = m.groupItemTitle || null;
+    const siblings = (event.markets || []).filter(s => s.id !== m.id);
+    const otherContestants = siblings
+      .filter(s => s.groupItemTitle && !/^(other|autre)$/i.test(s.groupItemTitle))
+      .map(s => s.groupItemTitle);
+    let yesLabel = "Oui";
+    let noLabel = "Non";
+    if (groupItemTitle && !/^(other|autre)$/i.test(groupItemTitle)) {
+      if (otherContestants.length === 1) {
+        // Match binaire : "Mensik" vs "Fonseca"
+        yesLabel = groupItemTitle;
+        noLabel = otherContestants[0];
+      } else if (otherContestants.length > 1) {
+        // Multi-outcome (ex Group A winner avec 4 teams) : YES = ce contestant, NO = "Autre"
+        yesLabel = groupItemTitle;
+        noLabel = "Autre";
+      }
+    }
+
     return {
       id: m.id,
       conditionId: m.conditionId,
@@ -114,6 +139,8 @@
       prices,
       yesPrice: prices[0] || 0,
       noPrice: prices[1] || 0,
+      yesLabel, noLabel,
+      groupItemTitle,
       volume: Number(m.volume || 0),
       volume24hr: Number(m.volume24hr || 0),
       volume1wk: Number(m.volume1wk || 0),
