@@ -144,8 +144,8 @@ h4 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.04em; }
   letter-spacing: 0.42em; text-transform: uppercase;
 }
 .brand .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 12px var(--orange); }
-.brand-logo { font-family: "Quicksand", var(--font); font-weight: 700; font-size: 1.55rem;
-  letter-spacing: -0.02em; text-transform: none; color: var(--text); line-height: 1; }
+.brand-logo { font-family: "Anton", Impact, sans-serif; font-weight: 400; font-size: 1.65rem;
+  letter-spacing: 0.015em; text-transform: uppercase; color: var(--text); line-height: 1; }
 .brand-logo .s { color: var(--orange); }
 .brand-lines { height: 1.05rem; width: auto; display: block; flex: none; }
 
