@@ -1073,7 +1073,11 @@
     const VIEWS = { overview: viewOverview, challenges: viewChallenges, betting: viewBetting, predictions: viewPredictions, arena: viewArena, certificates: viewCertificates, rewards: viewRewards, community: viewCommunity, profile: viewProfile, settings: viewSettings };
 
     /* ---------- Routing & shell ---------- */
-    function current() { const h = (location.hash || "#overview").slice(1); return VIEWS[h] ? h : "overview"; }
+    function current() {
+      // Strip la query string : "#challenges?v=predictions" → "challenges"
+      const h = (location.hash || "#overview").slice(1).split("?")[0];
+      return VIEWS[h] ? h : "overview";
+    }
     function go(sec) { location.hash = sec; }
     function renderSidebar() {
       const u = SF.currentUser(), cur = current();
