@@ -47,13 +47,9 @@
   <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
   <script>
-    // ----- Auth admin : mot de passe simple (demo) -----
-    const ADMIN_PASS = "spovibe-admin";
-    if (sessionStorage.getItem("sf_admin") !== "ok") {
-      const p = prompt("Mot de passe admin");
-      if (p !== ADMIN_PASS) { alert("Accès refusé."); location.href = "index.html"; throw new Error("denied"); }
-      sessionStorage.setItem("sf_admin", "ok");
-    }
+    // ----- Accès admin : géré par RLS Supabase (table public.admins) -----
+    // Plus de mot de passe en clair. Si l'utilisateur connecté n'est pas
+    // dans la whitelist Supabase, loadAdminData() affichera "Accès refusé".
 
     document.getElementById("nav").innerHTML = SF.renderNav();
 
@@ -368,7 +364,7 @@
     }
     function render() {
       const cur = current(), tt = TITLES[cur];
-      const head = `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="refreshAdmin()">Actualiser</button><button class="pill-sel ghost" onclick="sessionStorage.removeItem('sf_admin');location.reload();">Se déconnecter</button></div></div>`;
+      const head = `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="refreshAdmin()">Actualiser</button><button class="pill-sel ghost" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Se déconnecter</button></div></div>`;
       document.getElementById("view").innerHTML = head + VIEWS[cur]();
       renderSidebar();
       window.scrollTo({ top: 0, behavior: "instant" });
