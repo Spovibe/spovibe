@@ -36,16 +36,30 @@
     </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/sb-config.js"></script>
+  <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
   <script>
     document.getElementById("nav").innerHTML = SF.renderNav();
     const alert = document.getElementById("alert");
-    document.getElementById("form").addEventListener("submit", (e) => {
+    const submitBtn = document.querySelector("#form button[type=submit]");
+    document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const res = SF.login(document.getElementById("email").value, document.getElementById("password").value);
-      if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
-      const acc = SF.getAccount();
-      location.href = acc ? "espace.html" : "challenges.html";
+      alert.classList.remove("show");
+      const original = submitBtn.textContent;
+      submitBtn.disabled = true; submitBtn.textContent = "Connexion…";
+      try {
+        const res = await SF.login(
+          document.getElementById("email").value,
+          document.getElementById("password").value
+        );
+        if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        const acc = SF.getAccount();
+        location.href = acc ? "espace.html" : "challenges.html";
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = original;
+      }
     });
   </script>
 </body>

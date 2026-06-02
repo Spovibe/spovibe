@@ -89,12 +89,18 @@
      ---------------------------------------------------------- */
   function getUsers() { return read(KEYS.users, {}); }
 
-  function signup(name, email, password) {
+  // Auth via Supabase (avec fallback localStorage si Supabase pas chargé,
+  // utile pour les anciens utilisateurs de la démo localStorage)
+  async function signup(name, email, password) {
     email = (email || "").trim().toLowerCase();
     name = (name || "").trim();
     if (!name) return { error: "Veuillez indiquer votre nom." };
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Adresse e-mail invalide." };
     if ((password || "").length < 6) return { error: "Le mot de passe doit faire au moins 6 caractères." };
+    if (global.SpovibeAuth) {
+      return await global.SpovibeAuth.signUp(name, email, password);
+    }
+    // Fallback localStorage (démo hors-ligne)
     const users = getUsers();
     if (users[email]) return { error: "Un compte existe déjà avec cet e-mail." };
     users[email] = { name, email, pass: hash(password), created: Date.now() };
@@ -103,8 +109,11 @@
     return { ok: true, user: users[email] };
   }
 
-  function login(email, password) {
+  async function login(email, password) {
     email = (email || "").trim().toLowerCase();
+    if (global.SpovibeAuth) {
+      return await global.SpovibeAuth.signIn(email, password);
+    }
     const users = getUsers();
     const u = users[email];
     if (!u || u.pass !== hash(password)) return { error: "E-mail ou mot de passe incorrect." };
@@ -112,9 +121,16 @@
     return { ok: true, user: u };
   }
 
-  function logout() { localStorage.removeItem(KEYS.session); }
+  async function logout() {
+    if (global.SpovibeAuth) { await global.SpovibeAuth.signOut(); }
+    localStorage.removeItem(KEYS.session);
+  }
 
   function currentUser() {
+    if (global.SpovibeAuth) {
+      const u = global.SpovibeAuth.currentUser();
+      if (u) return u;
+    }
     const email = read(KEYS.session, null);
     if (!email) return null;
     return getUsers()[email] || null;

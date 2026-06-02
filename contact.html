@@ -123,26 +123,45 @@
     </div>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/sb-config.js"></script>
+  <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
   <script>
     document.getElementById("nav").innerHTML = SF.renderNav();
     const alert = document.getElementById("alert");
     const okAlert = document.getElementById("okAlert");
-    document.getElementById("form").addEventListener("submit", (e) => {
+    const submitBtn = document.querySelector("#form button[type=submit]");
+    document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
       alert.classList.remove("show");
       okAlert.classList.remove("show");
-      const res = SF.saveContact({
+      const payload = {
         name: document.getElementById("name").value,
         email: document.getElementById("email").value,
         subject: document.getElementById("subject").value,
         message: document.getElementById("message").value,
-      });
-      if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
-      okAlert.textContent = "Merci ! Votre message a bien été envoyé. Nous vous répondrons sous 24 h.";
-      okAlert.classList.add("show");
-      e.target.reset();
-      okAlert.scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+      const original = submitBtn.textContent;
+      submitBtn.disabled = true; submitBtn.textContent = "Envoi…";
+      try {
+        // Local fallback (toujours)
+        SF.saveContact(payload);
+        // Supabase si dispo
+        if (window.SpovibeAuth) {
+          const res = await window.SpovibeAuth.insertContact(payload);
+          if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        }
+        okAlert.textContent = "Merci ! Votre message a bien été envoyé. Nous vous répondrons sous 24 h.";
+        okAlert.classList.add("show");
+        e.target.reset();
+        okAlert.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch (err) {
+        alert.textContent = err.message || "Erreur lors de l'envoi.";
+        alert.classList.add("show");
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = original;
+      }
     });
   </script>
 </body>

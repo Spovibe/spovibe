@@ -40,19 +40,35 @@
     </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/sb-config.js"></script>
+  <script src="assets/sb.js"></script>
   <script src="assets/app.js"></script>
   <script>
     document.getElementById("nav").innerHTML = SF.renderNav();
     const alert = document.getElementById("alert");
-    document.getElementById("form").addEventListener("submit", (e) => {
+    const submitBtn = document.querySelector("#form button[type=submit]");
+    document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const res = SF.signup(
-        document.getElementById("name").value,
-        document.getElementById("email").value,
-        document.getElementById("password").value
-      );
-      if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
-      location.href = "challenges.html";
+      alert.classList.remove("show");
+      const original = submitBtn.textContent;
+      submitBtn.disabled = true; submitBtn.textContent = "Création…";
+      try {
+        const res = await SF.signup(
+          document.getElementById("name").value,
+          document.getElementById("email").value,
+          document.getElementById("password").value
+        );
+        if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        if (res.needsConfirmation) {
+          alert.classList.remove("error"); alert.classList.add("ok","show");
+          alert.textContent = "Vérifiez votre boîte mail pour confirmer votre compte.";
+          return;
+        }
+        location.href = "challenges.html";
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = original;
+      }
     });
   </script>
 </body>
