@@ -246,11 +246,19 @@
       markets = cache.markets;
     } else {
       const events = await fetchEventsRaw();
+      const now = Date.now();
       markets = [];
       for (const event of events) {
         if (!event.markets || event.markets.length === 0) continue;
         for (const market of event.markets) {
           if (market.closed || market.acceptingOrders === false) continue;
+          // Skip si endDate est passée — évite d'afficher des marchés "techniquement
+          // ouverts mais en attente de résolution" en haut quand on trie par "Fin proche".
+          const endStr = market.endDate || market.endDateIso || event.endDate;
+          if (endStr) {
+            const endMs = new Date(endStr).getTime();
+            if (!isNaN(endMs) && endMs < now) continue;
+          }
           markets.push(normalize(market, event));
         }
       }
@@ -261,6 +269,10 @@
     }
     // Filtrage
     let list = markets;
+    // Toujours exclure les marchés dont l'endDate est dépassée — même check au cas
+    // où la liste vient du cache localStorage et le temps a passé depuis le fetch.
+    const now = Date.now();
+    list = list.filter(m => !m.endDateMs || m.endDateMs >= now);
     if (filter.category && filter.category !== "all") {
       list = list.filter(m => m.category === filter.category);
     }
