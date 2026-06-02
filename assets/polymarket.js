@@ -9,20 +9,61 @@
   "use strict";
 
   const API_BASE = "https://gamma-api.polymarket.com";
-  const CACHE_KEY = "sf_polymarket_cache_v1";
+  const CACHE_KEY = "sf_polymarket_cache_v2";  // bump v2 (nouvelle source events)
   const CACHE_TTL_MS = 10 * 60 * 1000;  // 10 minutes
 
-  // Catégories Spovibe = mapping vers les tags Polymarket les plus utiles.
-  // Si un marché n'a aucun tag dans cette liste → catégorie "Autres".
-  // L'ordre détermine l'ordre d'affichage des onglets côté UI.
+  // Catégories Spovibe = mapping étendu vers les tags Polymarket réels.
+  // Source vérifiée : endpoint /events renvoie un array tags par event.
+  // L'ordre détermine la priorité de matching (1er hit gagne) + ordre UI.
   const SPOVIBE_CATEGORIES = [
-    { slug: "sports",       label: "Sports",        tagSlugs: ["sports", "football", "soccer", "nba", "nfl", "mlb", "nhl", "tennis", "ufc", "f1", "boxing", "golf", "cricket", "esports"] },
-    { slug: "politics",     label: "Politique",     tagSlugs: ["politics", "us-elections", "elections", "trump", "house-races", "federal-government", "geopolitics", "congress"] },
-    { slug: "crypto",       label: "Crypto",        tagSlugs: ["crypto", "bitcoin", "ethereum", "memecoins", "microstrategy", "solana"] },
-    { slug: "tech",         label: "Tech",          tagSlugs: ["tech", "ai", "artificial-intelligence", "apple", "google", "meta", "nvidia"] },
-    { slug: "economy",      label: "Économie",      tagSlugs: ["economy", "business", "stocks", "fed", "earnings", "macro"] },
-    { slug: "culture",      label: "Culture & Pop", tagSlugs: ["pop-culture", "entertainment", "music", "movies", "celebrity", "oscars", "grammys"] },
-    { slug: "world",        label: "Monde",         tagSlugs: ["world", "international", "europe", "asia", "middle-east", "ukraine"] },
+    { slug: "sports", label: "Sports", tagSlugs: [
+      "sports", "soccer", "football", "nfl", "nba", "mlb", "nhl",
+      "tennis", "atp", "wta", "ufc", "mma", "boxing",
+      "f1", "formula-1", "nascar", "racing", "motogp",
+      "golf", "pga", "cricket", "ipl", "rugby",
+      "esports", "lol", "csgo", "valorant", "dota",
+      "world-cup", "fifa-world-cup", "uefa", "champions-league",
+      "premier-league", "epl", "la-liga", "serie-a", "bundesliga", "ligue-1",
+      "euro-2024", "euro-2026", "copa-america", "concacaf", "afcon",
+      "olympic", "olympics", "summer-olympics", "winter-olympics",
+      "super-bowl", "ncaa", "march-madness", "stanley-cup", "world-series",
+    ]},
+    { slug: "politics", label: "Politique", tagSlugs: [
+      "politics", "us-elections", "elections", "trump", "biden", "harris",
+      "house-races", "federal-government", "congress", "supreme-court",
+      "republican", "democrat", "senate", "presidential", "governor",
+      "midterms", "election-2024", "election-2026", "election-2028",
+      "presidential-election", "primary",
+    ]},
+    { slug: "crypto", label: "Crypto", tagSlugs: [
+      "crypto", "bitcoin", "btc", "ethereum", "eth", "memecoins",
+      "microstrategy", "solana", "sol", "blockchain", "defi", "nft",
+      "stablecoins", "doge", "shiba", "etf", "crypto-etf",
+    ]},
+    { slug: "tech", label: "Tech", tagSlugs: [
+      "tech", "ai", "artificial-intelligence", "apple", "google", "meta",
+      "nvidia", "microsoft", "amazon", "openai", "tesla", "spacex",
+      "twitter", "x", "facebook", "instagram", "tiktok", "youtube",
+      "anthropic", "chatgpt", "claude", "gemini",
+    ]},
+    { slug: "economy", label: "Économie", tagSlugs: [
+      "economy", "business", "stocks", "fed", "earnings", "macro",
+      "inflation", "recession", "gdp", "unemployment", "rates", "markets",
+      "finance", "jobs-report", "cpi", "fed-rates", "interest-rates",
+    ]},
+    { slug: "culture", label: "Culture & Pop", tagSlugs: [
+      "pop-culture", "entertainment", "music", "movies", "celebrity",
+      "oscars", "grammys", "eurovision", "emmys", "golden-globes",
+      "albums", "concerts", "netflix", "marvel", "disney", "tv",
+      "gaming", "video-games", "gta-vi", "minecraft",
+    ]},
+    { slug: "world", label: "Monde", tagSlugs: [
+      "world", "international", "europe", "asia", "middle-east", "africa",
+      "ukraine", "israel", "iran", "geopolitics", "china", "russia",
+      "war", "peace", "us-x-iran", "us-x-russia", "us-x-china",
+      "israel-iran", "israel-palestine", "north-korea", "taiwan",
+      "venezuela", "syria", "lebanon", "yemen",
+    ]},
   ];
 
   function getCache() {
@@ -46,11 +87,13 @@
     try { return JSON.parse(v); } catch (e) { return fallback; }
   }
 
-  // Mappe un marché Gamma vers le format interne Spovibe
-  function normalize(m) {
+  // Mappe un marché Gamma (depuis /events) vers le format interne Spovibe.
+  // Le 2e arg event apporte tags + image fallback.
+  function normalize(m, event) {
+    event = event || {};
     const outcomes = parseField(m.outcomes, ["Yes", "No"]);
     const prices = parseField(m.outcomePrices, ["0.5", "0.5"]).map(p => Number(p));
-    const tags = (m.events && m.events[0] && m.events[0].tags) ? m.events[0].tags : [];
+    const tags = event.tags || m.tags || [];
     const tagSlugs = tags.map(t => (t.slug || "").toLowerCase());
     // Détermine la catégorie Spovibe : 1re catégorie qui matche un tag
     let category = "other";
@@ -65,8 +108,8 @@
       conditionId: m.conditionId,
       slug: m.slug,
       question: m.question,
-      description: m.description || "",
-      image: m.image || (m.events && m.events[0] && m.events[0].image),
+      description: m.description || event.description || "",
+      image: m.image || event.image,
       outcomes,
       prices,
       yesPrice: prices[0] || 0,
@@ -75,36 +118,36 @@
       volume24hr: Number(m.volume24hr || 0),
       volume1wk: Number(m.volume1wk || 0),
       liquidity: Number(m.liquidity || 0),
-      endDate: m.endDate || m.endDateIso,
-      endDateMs: m.endDate ? new Date(m.endDate).getTime() : null,
+      endDate: m.endDate || m.endDateIso || event.endDate,
+      endDateMs: (m.endDate || event.endDate) ? new Date(m.endDate || event.endDate).getTime() : null,
       closed: !!m.closed,
       active: !!m.active,
       acceptingOrders: m.acceptingOrders !== false,
-      eventId: m.events && m.events[0] ? m.events[0].id : null,
-      eventTitle: m.events && m.events[0] ? m.events[0].title : null,
-      eventSlug: m.events && m.events[0] ? m.events[0].slug : null,
+      eventId: event.id,
+      eventTitle: event.title,
+      eventSlug: event.slug,
       category, categoryLabel,
       tags: tags.map(t => ({ id: t.id, label: t.label, slug: t.slug })),
     };
   }
 
-  // Fetch tous les marchés actifs (avec pagination, jusqu'à un cap raisonnable)
-  async function fetchMarketsRaw(maxPages) {
-    maxPages = maxPages || 4;  // 4 pages × 500 = 2000 marchés max (largement OK pour démarrer)
+  // Fetch les events actifs (qui incluent les tags + leur sous-markets)
+  async function fetchEventsRaw(maxPages) {
+    maxPages = maxPages || 4;  // 4 × 200 = 800 events ≈ 2000+ markets
     const all = [];
     for (let p = 0; p < maxPages; p++) {
-      const url = `${API_BASE}/markets?active=true&closed=false&limit=500&offset=${p * 500}&order=volume24hr&ascending=false`;
+      const url = `${API_BASE}/events?active=true&closed=false&limit=200&offset=${p * 200}&order=volume24hr&ascending=false`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Polymarket API: " + res.status);
       const batch = await res.json();
       if (!Array.isArray(batch) || batch.length === 0) break;
       all.push(...batch);
-      if (batch.length < 500) break;  // dernière page
+      if (batch.length < 200) break;  // dernière page
     }
     return all;
   }
 
-  // Récupère les marchés (depuis cache si frais, sinon API)
+  // Récupère les marchés (depuis cache si frais, sinon API /events qu'on flatten)
   async function getMarkets(filter) {
     filter = filter || {};
     let markets;
@@ -112,8 +155,18 @@
     if (cache) {
       markets = cache.markets;
     } else {
-      const raw = await fetchMarketsRaw();
-      markets = raw.map(normalize).filter(m => m.acceptingOrders && !m.closed);
+      const events = await fetchEventsRaw();
+      markets = [];
+      for (const event of events) {
+        if (!event.markets || event.markets.length === 0) continue;
+        for (const market of event.markets) {
+          if (market.closed || market.acceptingOrders === false) continue;
+          markets.push(normalize(market, event));
+        }
+      }
+      // Dédoublonnage par id au cas où
+      const seen = new Set();
+      markets = markets.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
       setCache(markets);
     }
     // Filtrage
