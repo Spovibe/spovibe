@@ -96,6 +96,8 @@
     name = (name || "").trim();
     if (!name) return { error: "Veuillez indiquer votre nom." };
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Adresse e-mail invalide." };
+    // Domaine @spovibe.com réservé aux comptes admin créés via Supabase Dashboard
+    if (/@spovibe\.com$/.test(email)) return { error: "Ce domaine d'e-mail est réservé. Utilise une adresse personnelle." };
     if ((password || "").length < 6) return { error: "Le mot de passe doit faire au moins 6 caractères." };
     if (global.SpovibeAuth) {
       return await global.SpovibeAuth.signUp(name, email, password);
