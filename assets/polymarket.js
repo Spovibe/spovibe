@@ -135,7 +135,7 @@
   // Limit réduite à 100 par page pour éviter les timeouts (le payload event est
   // lourd : chaque event embarque sa liste de markets + tags + metadata).
   async function fetchEventsRaw(maxPages) {
-    maxPages = maxPages || 3;  // 3 × 100 = 300 events ≈ 1000+ markets, suffisant
+    maxPages = maxPages || 6;  // 6 × 100 = 600 events ≈ 1800+ markets
     const all = [];
     for (let p = 0; p < maxPages; p++) {
       const url = `${API_BASE}/events?active=true&closed=false&limit=100&offset=${p * 100}&order=volume24hr&ascending=false`;
