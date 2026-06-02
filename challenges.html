@@ -141,19 +141,27 @@
     }
     window.selectTier = selectTier;
 
-    document.getElementById("coBtn").addEventListener("click", () => {
+    document.getElementById("coBtn").addEventListener("click", async () => {
       const alert = document.getElementById("coAlert");
+      const btn = document.getElementById("coBtn");
       alert.classList.remove("show");
       if (!selected) return;
       if (!SF.currentUser()) { location.href = "signup.html"; return; }
-      // On vérifie seulement les comptes du MÊME vertical (chaque vertical a son slot dédié)
+      // S'assurer que les données du user sont chargées avant de vérifier l'existant
+      await SF.dataReady();
       const existing = SF.getAccount(selected.vertical);
       if (existing && (existing.status === "active" || existing.status === "funded" || existing.status === "passed")) {
         if (!confirm(`Tu as déjà un challenge ${COPY[selected.vertical].coVertical} en cours. Le remplacer effacera sa progression. Continuer ?`)) return;
       }
-      const res = SF.startChallenge(selected.id);
-      if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
-      location.href = "espace.html";
+      const origLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Enregistrement…";
+      try {
+        const res = await SF.startChallenge(selected.id);
+        if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
+        location.href = "espace.html";
+      } finally {
+        btn.disabled = false; btn.textContent = origLabel;
+      }
     });
 
     // Onglets vertical

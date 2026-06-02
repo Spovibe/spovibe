@@ -999,7 +999,7 @@
           <p class="muted" style="font-size:0.9rem;margin-bottom:14px;">Réinitialiser efface la progression du challenge choisi.</p>
           ${SF.sportsAccount() ? `<button class="btn btn-ghost" onclick="doReset('sports')" style="margin:0 8px 8px 0;">Réinitialiser Sports</button>` : ''}
           ${SF.predictionsAccount() ? `<button class="btn btn-ghost" onclick="doReset('predictions')" style="margin:0 8px 8px 0;">Réinitialiser Prédictions</button>` : ''}
-          <button class="btn btn-ghost" onclick="SF.logout();location.href='index.html'">Déconnexion</button>
+          <button class="btn btn-ghost" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>
         </div>`;
     }
 
@@ -1171,7 +1171,15 @@
       SpovibeCert.showPayout(u, p, ctx);
     };
 
-    if (SF.currentUser()) render();
+    // Boot async : on attend l'hydratation Supabase avant de render,
+    // sinon on afficherait un compte vide avant que les données arrivent.
+    (async () => {
+      if (!SF.currentUser()) return;
+      const view = document.getElementById("view");
+      view.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--ink-2);"><div style="width:42px;height:42px;border:3px solid var(--lavande);border-top-color:transparent;border-radius:50%;margin:0 auto 18px;animation:sf-spin 0.8s linear infinite;"></div><div>Chargement de vos données…</div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';
+      try { await SF.dataReady(); } catch (e) { console.warn(e); }
+      render();
+    })();
   </script>
 </body>
 </html>

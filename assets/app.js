@@ -122,8 +122,21 @@
   }
 
   async function logout() {
-    if (global.SpovibeAuth) { await global.SpovibeAuth.signOut(); }
+    if (global.SpovibeAuth) {
+      await global.SpovibeAuth.signOut();
+      global.SpovibeAuth.resetHydrate && global.SpovibeAuth.resetHydrate();
+    }
     localStorage.removeItem(KEYS.session);
+    // On vide aussi le cache local pour ne pas leaker des données
+    // d'un user vers un autre sur le même navigateur.
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith("sf_payments_") || k.startsWith("sf_arena_tourn_") ||
+            k.startsWith("sf_prefs_") || k === KEYS.accounts) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (e) {}
   }
 
   function currentUser() {
@@ -178,20 +191,21 @@
 
   function todayKey() { return new Date().toISOString().slice(0, 10); }
 
-  function startChallenge(tierId) {
+  // Async : retourne une promise qui résout après confirmation Supabase
+  // (l'UI affiche un mini-loader pendant ce temps, ~200ms typiques).
+  async function startChallenge(tierId) {
     const user = currentUser();
     if (!user) return { error: "Vous devez être connecté." };
     const tier = tierById(tierId);
     if (!tier) return { error: "Palier introuvable." };
     const accounts = getAccounts();
     if (!accounts[user.email]) accounts[user.email] = { sports: null, predictions: null };
-    // Empêche d'écraser un challenge actif sans confirmation (à gérer côté UI si besoin)
     const newAcc = {
       tierId: tier.id,
-      tier,                                                // snapshot des règles
-      vertical: tier.vertical,                             // sports | predictions
-      phase: "evaluation",                                 // evaluation | funded
-      status: "active",                                    // active | passed | funded | failed
+      tier,
+      vertical: tier.vertical,
+      phase: "evaluation",
+      status: "active",
       capital: tier.capital,
       balance: tier.capital,
       peak: tier.capital,
@@ -205,7 +219,26 @@
     accounts[user.email][tier.vertical] = newAcc;
     write(KEYS.accounts, accounts);
     const vertLabel = tier.vertical === "sports" ? "Sports" : "Prédictions";
-    addPayment({ type: "Challenge", label: `Challenge ${tier.name} · ${fmt(tier.capital)} (${vertLabel})`, amount: tier.fee, dir: "out" });
+    const payment = { at: Date.now(), type: "Challenge", label: `Challenge ${tier.name} · ${fmt(tier.capital)} (${vertLabel})`, amount: tier.fee, dir: "out" };
+    const l = payments(); l.unshift(payment); write("sf_payments_" + user.email, l);
+
+    // Persiste en base et attend la confirmation avant de retourner
+    if (global.SpovibeAuth) {
+      try {
+        const [accRes, payRes] = await Promise.all([
+          global.SpovibeAuth.pushAccount(tier.vertical, newAcc),
+          global.SpovibeAuth.pushPayment(payment),
+        ]);
+        if (accRes && accRes.error) {
+          // Rollback local en cas d'échec serveur
+          accounts[user.email][tier.vertical] = null;
+          write(KEYS.accounts, accounts);
+          return { error: "Erreur d'enregistrement : " + accRes.error };
+        }
+      } catch (e) {
+        return { error: "Connexion serveur perdue. Réessaie." };
+      }
+    }
     return { ok: true, account: newAcc };
   }
 
@@ -216,6 +249,8 @@
     const vert = acc.vertical || (acc.tier && acc.tier.vertical) || "sports";
     accounts[user.email][vert] = acc;
     write(KEYS.accounts, accounts);
+    // Persist Supabase (fire & forget — l'UI a déjà l'état frais via localStorage)
+    if (global.SpovibeAuth) { global.SpovibeAuth.pushAccount(vert, acc); }
   }
 
   // resetAccount(vertical?) : si vertical → reset ce slot ; sinon → reset les deux.
@@ -226,6 +261,11 @@
     if (vertical) accounts[user.email][vertical] = null;
     else accounts[user.email] = { sports: null, predictions: null };
     write(KEYS.accounts, accounts);
+    // Persist Supabase
+    if (global.SpovibeAuth) {
+      if (vertical) global.SpovibeAuth.pushAccount(vertical, null);
+      else global.SpovibeAuth.deleteAllAccounts();
+    }
   }
 
   // Stats agrégées cross-vertical (pour Arena, badges, hub d'accueil)
@@ -613,7 +653,12 @@
     return { ok: true };
   }
   function payments() { const u = currentUser(); return u ? read("sf_payments_" + u.email, []) : []; }
-  function addPayment(p) { const u = currentUser(); if (!u) return; const l = payments(); l.unshift(Object.assign({ at: Date.now() }, p)); write("sf_payments_" + u.email, l); }
+  function addPayment(p) {
+    const u = currentUser(); if (!u) return;
+    const stamped = Object.assign({ at: Date.now() }, p);
+    const l = payments(); l.unshift(stamped); write("sf_payments_" + u.email, l);
+    if (global.SpovibeAuth) { global.SpovibeAuth.pushPayment(stamped); }
+  }
   function prefs() { const u = currentUser(); return u ? read("sf_prefs_" + u.email, { notifs: true, newsletter: true }) : {}; }
   function savePrefs(p) { const u = currentUser(); if (u) write("sf_prefs_" + u.email, p); }
 
@@ -866,14 +911,14 @@
     const navLinks = links.map(l => `<a href="${l.href}">${l.label}</a>`).join("");
     const actions = u
       ? `<a class="btn btn-ghost btn-sm" href="espace.html">Espace membre</a>
-         <button class="btn btn-primary btn-sm" onclick="SF.logout();location.href='index.html'">Déconnexion</button>`
+         <button class="btn btn-primary btn-sm" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>`
       : `<a class="btn btn-ghost btn-sm" href="login.html">Connexion</a>
          <a class="btn btn-primary btn-sm" href="challenges.html">Commencer</a>`;
     // Auth visible aussi dans le burger mobile (caché en desktop)
     const mobileAuth = u
       ? `<div class="nav-mobile-auth">
            <a class="btn btn-ghost btn-block" href="espace.html">Espace membre</a>
-           <button class="btn btn-primary btn-block" onclick="SF.logout();location.href='index.html'">Déconnexion</button>
+           <button class="btn btn-primary btn-block" onclick="(async()=>{await SF.logout();location.href='index.html';})();">Déconnexion</button>
          </div>`
       : `<div class="nav-mobile-auth">
            <a class="btn btn-ghost btn-block" href="login.html">Connexion</a>
@@ -900,9 +945,18 @@
   /* ----------------------------------------------------------
      Export
      ---------------------------------------------------------- */
+  // dataReady : promise qui résout quand l'hydratation Supabase est terminée.
+  // Les pages back-office l'awaitent avant de render.
+  function dataReady() {
+    if (global.SpovibeAuth && global.SpovibeAuth.ensureHydrated) {
+      return global.SpovibeAuth.ensureHydrated();
+    }
+    return Promise.resolve(true);
+  }
+
   global.SF = {
     TIERS, TIERS_SPORTS, TIERS_PREDICTIONS, ALL_TIERS, tierById, DIVS,
-    signup, login, logout, currentUser,
+    signup, login, logout, currentUser, dataReady,
     getAccount, sportsAccount, predictionsAccount, activeAccounts,
     startChallenge, saveAccount, resetAccount,
     placeBet, claimFunded, withdraw, stats, combinedStats, countDays,

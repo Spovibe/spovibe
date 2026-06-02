@@ -60,6 +60,9 @@
       const { data: { session } } = await client().auth.getSession();
       if (session && session.user) {
         await refreshFromDb();
+        // Lance l'hydratation des données utilisateur (non bloquante ici,
+        // les pages qui en ont besoin l'awaiteront via ensureHydrated)
+        ensureHydrated();
       } else {
         setCachedUser(null);
       }
@@ -120,6 +123,186 @@
     } catch (e) { return { error: e.message }; }
   }
 
+  // -- Data layer Phase 2b : accounts + payments persistés --
+
+  // Convertit une ligne accounts (Supabase) → format objet localStorage SF
+  function rowToAccount(r) {
+    return {
+      tierId: r.tier_id,
+      tier: r.tier,
+      vertical: r.vertical,
+      phase: r.phase,
+      status: r.status,
+      capital: Number(r.capital),
+      balance: Number(r.balance),
+      peak: Number(r.peak),
+      startedAt: r.started_at ? new Date(r.started_at).getTime() : Date.now(),
+      fundedAt: r.funded_at ? new Date(r.funded_at).getTime() : null,
+      bets: Array.isArray(r.bets) ? r.bets : (r.bets || []),
+      pending: Array.isArray(r.pending) ? r.pending : (r.pending || []),
+      dayStart: r.day_start || {},
+      failReason: r.fail_reason || null,
+      withdrawn: Number(r.withdrawn || 0),
+    };
+  }
+
+  // Fetch toutes les données du user connecté
+  async function pullUserData() {
+    try {
+      const cached = getCachedUser();
+      if (!cached) return null;
+      const c = client();
+      const [accountsRes, paymentsRes] = await Promise.all([
+        c.from("accounts").select("*").eq("user_id", cached.id),
+        c.from("payments").select("*").eq("user_id", cached.id).order("at", { ascending: false }),
+      ]);
+      const slot = { sports: null, predictions: null };
+      for (const r of (accountsRes.data || [])) {
+        if (r.vertical === "sports" || r.vertical === "predictions") {
+          slot[r.vertical] = rowToAccount(r);
+        }
+      }
+      const payments = (paymentsRes.data || []).map(p => ({
+        type: p.type,
+        label: p.label,
+        amount: Number(p.amount),
+        dir: p.direction,
+        at: p.at ? new Date(p.at).getTime() : Date.now(),
+      }));
+      return { slot, payments };
+    } catch (e) {
+      console.warn("pullUserData error:", e);
+      return null;
+    }
+  }
+
+  // Hydrate le cache localStorage avec les données fraîches DB.
+  // On attend que tous les pushes en cours soient terminés avant de pull,
+  // sinon on risque d'écraser un état local plus récent (race condition
+  // entre une écriture client juste avant et un fetch DB juste après).
+  async function hydrateLocalStorage() {
+    const cached = getCachedUser();
+    if (!cached) return false;
+    // Attente des pushes en cours (max 3s)
+    let waited = 0;
+    while (_pendingPushes > 0 && waited < 3000) {
+      await new Promise(r => setTimeout(r, 50)); waited += 50;
+    }
+    const data = await pullUserData();
+    if (!data) return false;
+    try {
+      const all = JSON.parse(localStorage.getItem("sf_accounts") || "{}");
+      all[cached.email] = data.slot;
+      localStorage.setItem("sf_accounts", JSON.stringify(all));
+      localStorage.setItem("sf_payments_" + cached.email, JSON.stringify(data.payments));
+      return true;
+    } catch (e) { console.warn("hydrate write error:", e); return false; }
+  }
+
+  // Compteur de pushes en vol (incrémenté par pushAccount / pushPayment)
+  let _pendingPushes = 0;
+
+  // Upsert un account (sports OU predictions) en base
+  async function pushAccount(vertical, acc) {
+    _pendingPushes++;
+    try {
+      const cached = getCachedUser();
+      if (!cached) return { error: "not connected" };
+      if (!acc) {
+        // null → on supprime cette ligne en base
+        await client().from("accounts").delete().eq("user_id", cached.id).eq("vertical", vertical);
+        return { ok: true };
+      }
+      const row = {
+        user_id: cached.id,
+        vertical,
+        tier_id: acc.tierId,
+        tier: acc.tier,
+        phase: acc.phase || "evaluation",
+        status: acc.status || "active",
+        capital: acc.capital,
+        balance: acc.balance,
+        peak: acc.peak,
+        started_at: acc.startedAt ? new Date(acc.startedAt).toISOString() : new Date().toISOString(),
+        funded_at: acc.fundedAt ? new Date(acc.fundedAt).toISOString() : null,
+        bets: acc.bets || [],
+        pending: acc.pending || [],
+        day_start: acc.dayStart || {},
+        fail_reason: acc.failReason || null,
+        withdrawn: acc.withdrawn || 0,
+      };
+      const { error } = await client().from("accounts").upsert(row, { onConflict: "user_id,vertical" });
+      if (error) { console.warn("pushAccount error:", error); return { error: error.message }; }
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+    finally { _pendingPushes--; }
+  }
+
+  // Insert un payment
+  async function pushPayment(p) {
+    _pendingPushes++;
+    try {
+      const cached = getCachedUser();
+      if (!cached || !p) return { error: "not connected" };
+      const { error } = await client().from("payments").insert({
+        user_id: cached.id,
+        type: p.type,
+        label: p.label,
+        amount: p.amount,
+        direction: p.dir || (p.amount < 0 ? "out" : "in"),
+        at: p.at ? new Date(p.at).toISOString() : new Date().toISOString(),
+      });
+      if (error) { console.warn("pushPayment error:", error); return { error: error.message }; }
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+    finally { _pendingPushes--; }
+  }
+
+  // Supprime tous les comptes (utilisé par admin reset / leave)
+  async function deleteAllAccounts() {
+    _pendingPushes++;
+    try {
+      const cached = getCachedUser();
+      if (!cached) return { ok: true };
+      await client().from("accounts").delete().eq("user_id", cached.id);
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+    finally { _pendingPushes--; }
+  }
+
+  // -- Admin : liste tous les users (RLS doit autoriser admin) --
+  async function adminListUsers() {
+    try {
+      const c = client();
+      const { data: profiles, error: pe } = await c.from("profiles").select("id, email, name, created_at").order("created_at", { ascending: false });
+      if (pe) return { error: pe.message };
+      const { data: accounts } = await c.from("accounts").select("user_id, vertical, status, phase, balance, capital, peak");
+      const { data: payments } = await c.from("payments").select("user_id, type, amount, direction, at");
+      // Agrège par user
+      const byUser = {};
+      for (const p of (profiles || [])) byUser[p.id] = { profile: p, sports: null, predictions: null, payments: [] };
+      for (const a of (accounts || [])) {
+        if (!byUser[a.user_id]) continue;
+        if (a.vertical === "sports" || a.vertical === "predictions") byUser[a.user_id][a.vertical] = a;
+      }
+      for (const pay of (payments || [])) {
+        if (!byUser[pay.user_id]) continue;
+        byUser[pay.user_id].payments.push(pay);
+      }
+      return { ok: true, users: Object.values(byUser) };
+    } catch (e) { return { error: e.message }; }
+  }
+
+  // -- Promise d'hydratation : utilisée par les pages pour await avant render --
+  let _hydratePromise = null;
+  function ensureHydrated() {
+    if (!_hydratePromise) {
+      _hydratePromise = hydrateLocalStorage().catch(e => { console.warn(e); return false; });
+    }
+    return _hydratePromise;
+  }
+  function resetHydrate() { _hydratePromise = null; }
+
   // -- Traduction des messages Supabase en français --
   function traduireErreur(msg) {
     const m = (msg || "").toLowerCase();
@@ -136,6 +319,10 @@
     client, init, refreshFromDb,
     signUp, signIn, signOut, currentUser,
     insertContact,
+    // Phase 2b — data layer
+    pullUserData, hydrateLocalStorage, pushAccount, pushPayment,
+    deleteAllAccounts, ensureHydrated, resetHydrate,
+    adminListUsers,
   };
 
   // Auto-init au chargement
@@ -144,10 +331,20 @@
   // Sync entre onglets : si l'utilisateur se déconnecte ailleurs, on suit
   setTimeout(() => {
     try {
-      client().auth.onAuthStateChange((event) => {
-        if (event === "SIGNED_OUT") setCachedUser(null);
+      client().auth.onAuthStateChange(async (event) => {
+        if (event === "SIGNED_OUT") {
+          setCachedUser(null);
+          resetHydrate();
+          // Nettoie le cache local des données utilisateur précédent
+          try {
+            const all = JSON.parse(localStorage.getItem("sf_accounts") || "{}");
+            localStorage.setItem("sf_accounts", JSON.stringify(all));
+          } catch (e) {}
+        }
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-          refreshFromDb();
+          await refreshFromDb();
+          resetHydrate();
+          await ensureHydrated();
         }
       });
     } catch (e) {}

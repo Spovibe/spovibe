@@ -86,6 +86,106 @@
       communities: ["Communautés", "Communautés de créateurs"],
     };
 
+    // ----- Cache de données Supabase (Phase 2b) -----
+    // Sur cette page, on shadow les helpers SF.admin* pour lire en LIVE depuis Supabase
+    // (au lieu de localStorage). Hydratation au boot via loadAdminData().
+    let _supaUsers = [];  // [{ profile, sports, predictions, payments }]
+    let _supaContacts = [];
+
+    function adminUsers() {
+      return _supaUsers.map(u => ({
+        name: u.profile.name,
+        email: u.profile.email,
+        created: u.profile.created_at ? new Date(u.profile.created_at).getTime() : Date.now(),
+      })).sort((a, b) => b.created - a.created);
+    }
+    function adminAccounts() {
+      const out = [];
+      for (const u of _supaUsers) {
+        for (const vert of ["sports", "predictions"]) {
+          const a = u[vert];
+          if (!a) continue;
+          out.push({
+            _email: u.profile.email,
+            _name: u.profile.name,
+            vertical: a.vertical,
+            tier: a.tier || { name: "?", vertical: a.vertical, capital: 0, maxDD: 0, maxDailyLoss: 0, minActiveDays: 0, minBets: 0, target: 0 },
+            capital: Number(a.capital || 0),
+            balance: Number(a.balance || 0),
+            peak: Number(a.peak || 0),
+            phase: a.phase,
+            status: a.status,
+            withdrawn: Number(a.withdrawn || 0),
+            bets: a.bets || [],
+            pending: a.pending || [],
+            fundedAt: a.funded_at ? new Date(a.funded_at).getTime() : null,
+          });
+        }
+      }
+      return out;
+    }
+    function adminPayments() {
+      const out = [];
+      for (const u of _supaUsers) {
+        for (const p of (u.payments || [])) {
+          out.push({
+            _email: u.profile.email,
+            _name: u.profile.name,
+            at: p.at ? new Date(p.at).getTime() : Date.now(),
+            type: p.type,
+            amount: Number(p.amount || 0),
+            dir: p.direction,
+            label: p.label || "",
+          });
+        }
+      }
+      return out.sort((a, b) => b.at - a.at);
+    }
+    function adminContacts() { return _supaContacts; }
+    function adminKpis() {
+      const users = adminUsers();
+      const accounts = adminAccounts();
+      const pays = adminPayments();
+      const MONTH = 30 * 86400000;
+      return {
+        usersTotal: users.length,
+        usersMonth: users.filter(u => Date.now() - u.created < MONTH).length,
+        challengesActive: accounts.filter(a => a.status === "active" && a.phase === "evaluation").length,
+        challengesPassed: accounts.filter(a => a.status === "passed").length,
+        challengesFailed: accounts.filter(a => a.status === "failed").length,
+        fundedActive: accounts.filter(a => a.phase === "funded").length,
+        revenue: pays.filter(p => p.dir === "out" && p.type === "Challenge").reduce((s, p) => s + p.amount, 0),
+        revenueMonth: pays.filter(p => p.dir === "out" && p.type === "Challenge" && Date.now() - p.at < MONTH).reduce((s, p) => s + p.amount, 0),
+        payoutsTotal: pays.filter(p => p.dir === "in" && p.type === "Retrait").reduce((s, p) => s + p.amount, 0),
+        payoutsMonth: pays.filter(p => p.dir === "in" && p.type === "Retrait" && Date.now() - p.at < MONTH).reduce((s, p) => s + p.amount, 0),
+        messagesOpen: _supaContacts.filter(c => !c.handled).length,
+      };
+    }
+    function adminCommunitiesList() { return []; /* TODO Phase 2c */ }
+
+    async function loadAdminData() {
+      try {
+        const r = await SpovibeAuth.adminListUsers();
+        if (r.error) {
+          console.warn("admin load error:", r.error);
+          document.getElementById("view").innerHTML = `<div class="card center" style="padding:60px;"><h3>Accès refusé</h3><p class="muted" style="margin-top:10px;">Ton compte connecté n'est pas dans la table <code>admins</code> de Supabase. Ajoute ton UUID via le script <code>002_admin.sql</code>, puis recharge.</p><p class="muted" style="margin-top:6px;font-size:0.84rem;">Erreur : ${SF.escapeHtml(r.error)}</p></div>`;
+          renderSidebar();
+          return false;
+        }
+        _supaUsers = r.users || [];
+        // Contacts (RLS admin OK)
+        try {
+          const c = SpovibeAuth.client();
+          const { data: contacts } = await c.from("contacts").select("*").order("at", { ascending: false });
+          _supaContacts = (contacts || []).map(c => ({ id: c.id, name: c.name, email: c.email, subject: c.subject, message: c.message, handled: c.handled, at: c.at ? new Date(c.at).getTime() : Date.now() }));
+        } catch (e) {}
+        return true;
+      } catch (e) {
+        console.warn(e);
+        return false;
+      }
+    }
+
     // ----- Vues -----
     function fmt(n) { return SF.fmt(n); }
     function fmt2(n) { return SF.fmt2(n); }
@@ -99,9 +199,9 @@
     }
 
     function viewDashboard() {
-      const k = SF.adminKpis();
-      const recentUsers = SF.adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 6);
-      const recentPays = SF.adminPayments().slice(0, 8);
+      const k = adminKpis();
+      const recentUsers = adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 6);
+      const recentPays = adminPayments().slice(0, 8);
       return `
         <div class="adm-grid">
           <div class="adm-stat featured"><div class="k">Revenue total</div><div class="v">${fmt(k.revenue)}</div><div class="s">+${fmt(k.revenueMonth)} ce mois</div></div>
@@ -111,7 +211,7 @@
           <div class="adm-stat"><div class="k">Payouts versés</div><div class="v">${fmt(k.payoutsTotal)}</div><div class="s">+${fmt(k.payoutsMonth)} ce mois</div></div>
           <div class="adm-stat"><div class="k">Marge brute</div><div class="v">${fmt(k.revenue - k.payoutsTotal)}</div><div class="s">Revenue moins payouts</div></div>
           <div class="adm-stat"><div class="k">Messages contact</div><div class="v">${k.messagesOpen}</div><div class="s">À traiter</div></div>
-          <div class="adm-stat"><div class="k">Communautés</div><div class="v">${SF.adminCommunitiesList().length}</div><div class="s">Créateurs actifs</div></div>
+          <div class="adm-stat"><div class="k">Communautés</div><div class="v">${adminCommunitiesList().length}</div><div class="s">Créateurs actifs</div></div>
         </div>
 
         <div class="dash-grid" style="margin-top:22px;">
@@ -131,9 +231,9 @@
     }
 
     function viewUsers() {
-      const users = SF.adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0));
+      const users = adminUsers().sort((a, b) => (b.created || 0) - (a.created || 0));
       const accountsByEmail = {};
-      SF.adminAccounts().forEach(a => {
+      adminAccounts().forEach(a => {
         if (!accountsByEmail[a._email]) accountsByEmail[a._email] = [];
         accountsByEmail[a._email].push(a);
       });
@@ -150,7 +250,7 @@
     }
 
     function viewEvals() {
-      const accs = SF.adminAccounts().filter(a => a.status === "active" && a.phase === "evaluation");
+      const accs = adminAccounts().filter(a => a.status === "active" && a.phase === "evaluation");
       if (!accs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucune évaluation en cours.</p></div>';
       return `<div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:820px;">
         <thead><tr><th>Utilisateur</th><th>Vertical</th><th>Palier</th><th>Profit</th><th>Drawdown</th><th>Jours actifs</th><th>${'Paris/Positions'}</th><th>Statut</th></tr></thead>
@@ -172,7 +272,7 @@
     }
 
     function viewFunded() {
-      const accs = SF.adminAccounts().filter(a => a.phase === "funded");
+      const accs = adminAccounts().filter(a => a.phase === "funded");
       if (!accs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucun compte financé pour le moment.</p></div>';
       const totalProfit = accs.reduce((sum, a) => sum + (a.balance - a.capital), 0);
       const totalWithdrawn = accs.reduce((sum, a) => sum + (a.withdrawn || 0), 0);
@@ -199,7 +299,7 @@
     }
 
     function viewPayments() {
-      const pays = SF.adminPayments();
+      const pays = adminPayments();
       const revenue = pays.filter(p => p.dir === "out" && p.type === "Challenge").reduce((s, p) => s + p.amount, 0);
       const payouts = pays.filter(p => p.dir === "in" && p.type === "Retrait").reduce((s, p) => s + p.amount, 0);
       const margin = revenue - payouts;
@@ -221,7 +321,7 @@
     }
 
     function viewMessages() {
-      const msgs = SF.adminContacts();
+      const msgs = adminContacts();
       if (!msgs.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucun message reçu.</p></div>';
       return `<div style="display:flex;flex-direction:column;gap:12px;">${msgs.map(m => `<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
@@ -240,7 +340,7 @@
     }
 
     function viewCommunities() {
-      const list = SF.adminCommunitiesList();
+      const list = adminCommunitiesList();
       if (!list.length) return '<div class="card center" style="padding:46px;"><p class="muted">Aucune communauté créée pour le moment.</p></div>';
       return `<div class="card" style="padding:6px 0;overflow-x:auto;"><table class="history" style="min-width:680px;">
         <thead><tr><th>Code</th><th>Nom</th><th>Créateur</th><th>Membres</th><th>Messages</th></tr></thead>
@@ -268,13 +368,36 @@
     }
     function render() {
       const cur = current(), tt = TITLES[cur];
-      const head = `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="render()">Actualiser</button><button class="pill-sel ghost" onclick="sessionStorage.removeItem('sf_admin');location.reload();">Se déconnecter</button></div></div>`;
+      const head = `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="refreshAdmin()">Actualiser</button><button class="pill-sel ghost" onclick="sessionStorage.removeItem('sf_admin');location.reload();">Se déconnecter</button></div></div>`;
       document.getElementById("view").innerHTML = head + VIEWS[cur]();
       renderSidebar();
       window.scrollTo({ top: 0, behavior: "instant" });
     }
     window.addEventListener("hashchange", render);
-    render();
+
+    // Re-fetch + re-render au clic sur "Actualiser"
+    window.refreshAdmin = async () => {
+      const ok = await loadAdminData();
+      if (ok) render();
+    };
+
+    // Boot async : on attend que l'utilisateur Supabase soit hydraté ET
+    // que les données admin soient chargées, sinon les vues seraient vides.
+    (async () => {
+      const view = document.getElementById("view");
+      view.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--muted);"><div style="width:42px;height:42px;border:3px solid var(--orange);border-top-color:transparent;border-radius:50%;margin:0 auto 18px;animation:sf-spin 0.8s linear infinite;"></div><div>Chargement de la console admin…</div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';
+      renderSidebar();
+      if (window.SpovibeAuth) {
+        await new Promise(r => setTimeout(r, 200));  // laisse l'auth Supabase s'initialiser
+        if (!SF.currentUser()) {
+          view.innerHTML = '<div class="card center" style="padding:60px;"><h3>Pas connecté</h3><p class="muted" style="margin-top:10px;">Connecte-toi avec ton compte admin Supabase via <a href="login.html">/login</a>, puis reviens ici.</p></div>';
+          return;
+        }
+        const ok = await loadAdminData();
+        if (!ok) return;  // loadAdminData a déjà affiché l'erreur
+      }
+      render();
+    })();
   </script>
 </body>
 </html>
