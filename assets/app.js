@@ -680,7 +680,14 @@
     if (!t) { t = { soireeRegistered: false, survivor: { entered: false, round: 0, eliminated: false } }; write(key, t); }
     return t;
   }
-  function saveArenaTourn(t) { const u = currentUser(); if (u) write("sf_arena_tourn_" + u.email, t); }
+  function saveArenaTourn(t) {
+    const u = currentUser(); if (!u) return;
+    write("sf_arena_tourn_" + u.email, t);
+    // Marque l'engagement Arena côté Supabase (idempotent : marqué une seule fois)
+    if (global.SpovibeAuth && global.SpovibeAuth.markArenaEngaged) {
+      global.SpovibeAuth.markArenaEngaged();
+    }
+  }
   function toggleSoiree() { const t = arenaTourn(); t.soireeRegistered = !t.soireeRegistered; saveArenaTourn(t); return t; }
   function survivorEnter() { const t = arenaTourn(); if (!t.survivor.entered) { t.survivor = { entered: true, round: 1, eliminated: false }; saveArenaTourn(t); } return t; }
   function survivorPick() {
@@ -695,7 +702,13 @@
 
   // Duels (vs bot pour la démo)
   function getDuels() { const u = currentUser(); return u ? read("sf_duels_" + u.email, []) : []; }
-  function saveDuels(l) { const u = currentUser(); if (u) write("sf_duels_" + u.email, l); }
+  function saveDuels(l) {
+    const u = currentUser(); if (!u) return;
+    write("sf_duels_" + u.email, l);
+    if (global.SpovibeAuth && global.SpovibeAuth.markArenaEngaged) {
+      global.SpovibeAuth.markArenaEngaged();
+    }
+  }
   function createDuel(opponent, days) {
     const u = currentUser(); if (!u) return { error: "Connexion requise." };
     opponent = (opponent || "").trim(); if (!opponent) return { error: "Indique un pseudo." };

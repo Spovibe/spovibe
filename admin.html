@@ -96,6 +96,7 @@
         name: u.profile.name,
         email: u.profile.email,
         created: u.profile.created_at ? new Date(u.profile.created_at).getTime() : Date.now(),
+        arenaEngagedAt: u.profile.arena_engaged_at ? new Date(u.profile.arena_engaged_at).getTime() : null,
       })).sort((a, b) => b.created - a.created);
     }
     function adminAccounts() {
@@ -483,6 +484,97 @@
           </div>
         </div>`;
 
+      // ---------- 1bis. FREE vs PAYING + ARENA IMPACT ----------
+      // Free = inscrit mais aucun challenge acheté. Paying = ≥1 challenge.
+      const buyersByEmail = buyersSet;
+      const freeUsers = users.filter(u => !buyersByEmail.has(u.email));
+      const payingUsers = users.filter(u => buyersByEmail.has(u.email));
+      const conv = pct(payingUsers.length, users.length);
+
+      // Temps moyen jusqu'à 1er achat (jours)
+      const firstBuyAt = {};
+      for (const p of pays.filter(x => x.dir === "out" && x.type === "Challenge")) {
+        if (!firstBuyAt[p._email] || p.at < firstBuyAt[p._email]) firstBuyAt[p._email] = p.at;
+      }
+      const timesToConvert = users.filter(u => firstBuyAt[u.email]).map(u => (firstBuyAt[u.email] - u.created) / 86400000);
+      const avgDaysToConvert = timesToConvert.length ? Math.round(timesToConvert.reduce((s, x) => s + Math.max(0, x), 0) / timesToConvert.length) : null;
+
+      // Repeat buyers (≥ 2 achats)
+      const buyCounts = {};
+      for (const p of pays.filter(x => x.dir === "out" && x.type === "Challenge")) {
+        buyCounts[p._email] = (buyCounts[p._email] || 0) + 1;
+      }
+      const repeatBuyers = Object.values(buyCounts).filter(n => n >= 2).length;
+
+      // Arena impact
+      const arenaEngaged = users.filter(u => u.arenaEngagedAt);
+      const arenaNotEngaged = users.filter(u => !u.arenaEngagedAt);
+      const arenaEngagedPaying = arenaEngaged.filter(u => buyersByEmail.has(u.email)).length;
+      const arenaNotEngagedPaying = arenaNotEngaged.filter(u => buyersByEmail.has(u.email)).length;
+      const convArenaEngaged = pct(arenaEngagedPaying, arenaEngaged.length);
+      const convArenaNotEngaged = pct(arenaNotEngagedPaying, arenaNotEngaged.length);
+      const arenaLift = convArenaNotEngaged > 0 ? Math.round(((convArenaEngaged - convArenaNotEngaged) / convArenaNotEngaged) * 100) : (convArenaEngaged > 0 ? 100 : 0);
+      // Statistique de confiance (échantillon trop petit = on prévient)
+      const arenaSampleOK = arenaEngaged.length >= 10 && arenaNotEngaged.length >= 10;
+
+      registerCsv("free_paying", "spovibe_analytics_free_vs_paying.csv",
+        ["Métrique", "Valeur"],
+        [
+          ["Inscriptions totales", users.length],
+          ["Gratuits (jamais acheté)", freeUsers.length],
+          ["Payants (≥1 challenge)", payingUsers.length],
+          ["Taux de conversion global", conv + "%"],
+          ["Délai moyen avant 1er achat (jours)", avgDaysToConvert != null ? avgDaysToConvert : "—"],
+          ["Repeat buyers (≥2 achats)", repeatBuyers],
+          ["Arena engaged — total", arenaEngaged.length],
+          ["Arena engaged — payants", arenaEngagedPaying],
+          ["Arena engaged — conversion %", convArenaEngaged + "%"],
+          ["Arena non-engaged — total", arenaNotEngaged.length],
+          ["Arena non-engaged — payants", arenaNotEngagedPaying],
+          ["Arena non-engaged — conversion %", convArenaNotEngaged + "%"],
+          ["Lift Arena vs no-Arena", arenaLift + "%"],
+        ]);
+
+      const freePayingHtml = `
+        <div class="card" style="padding:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div><h3 style="margin:0;">Comptes gratuits vs payants</h3><p class="muted" style="margin:2px 0 0;font-size:0.84rem;">Conversion globale + lift apporté par l'engagement Arena</p></div>
+            ${csvBtn("free_paying", "Export CSV")}
+          </div>
+          <div class="adm-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px;">
+            <div class="adm-stat"><div class="k">Comptes gratuits</div><div class="v">${freeUsers.length}</div><div class="s">${pct(freeUsers.length, users.length)}% des inscrits</div></div>
+            <div class="adm-stat"><div class="k">Comptes payants</div><div class="v" style="color:var(--orange)">${payingUsers.length}</div><div class="s">${pct(payingUsers.length, users.length)}% des inscrits</div></div>
+            <div class="adm-stat featured"><div class="k">Conversion globale</div><div class="v">${conv}%</div><div class="s">Free → Payant</div></div>
+            <div class="adm-stat"><div class="k">Délai moyen achat</div><div class="v">${avgDaysToConvert != null ? avgDaysToConvert + 'j' : '—'}</div><div class="s">Entre signup et 1er challenge</div></div>
+          </div>
+
+          <h4 style="margin:0 0 10px;">Arena t'aide-t-il à convertir ?</h4>
+          ${users.length === 0 ? '<p class="muted">Aucun utilisateur pour comparer.</p>' : `
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+            <div style="background:linear-gradient(135deg,rgba(124,107,246,0.12),rgba(124,107,246,0.04));border:1px solid var(--border);border-radius:14px;padding:16px;">
+              <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--lavande);font-weight:800;margin-bottom:8px;">Arena engaged</div>
+              <div style="font-size:1.7rem;font-weight:800;font-family:var(--font);">${convArenaEngaged}%</div>
+              <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">${arenaEngagedPaying} payants / ${arenaEngaged.length} engaged</div>
+            </div>
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:16px;">
+              <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:800;margin-bottom:8px;">Arena NON-engaged</div>
+              <div style="font-size:1.7rem;font-weight:800;font-family:var(--font);color:var(--muted);">${convArenaNotEngaged}%</div>
+              <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">${arenaNotEngagedPaying} payants / ${arenaNotEngaged.length} non-engaged</div>
+            </div>
+            <div style="background:linear-gradient(135deg,${arenaLift >= 0 ? '#dcfce7,#bbf7d0' : '#fee2e2,#fecaca'});border:1px solid ${arenaLift >= 0 ? 'var(--green)' : 'var(--red, #ef4444)'};border-radius:14px;padding:16px;">
+              <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:${arenaLift >= 0 ? 'var(--green)' : '#dc2626'};font-weight:800;margin-bottom:8px;">Lift Arena</div>
+              <div style="font-size:1.7rem;font-weight:800;font-family:var(--font);color:${arenaLift >= 0 ? 'var(--green)' : '#dc2626'};">${arenaLift >= 0 ? '+' : ''}${arenaLift}%</div>
+              <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">vs comptes sans Arena</div>
+            </div>
+          </div>
+          ${!arenaSampleOK ? `<p class="muted" style="font-size:0.82rem;margin-top:14px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);padding:10px 14px;border-radius:10px;">⚠ <b>Échantillon trop petit pour conclure</b> (${arenaEngaged.length} engaged + ${arenaNotEngaged.length} non-engaged). Attends d'avoir au moins 10 users dans chaque groupe pour que la comparaison soit statistiquement crédible.</p>` : `<p class="muted" style="font-size:0.82rem;margin-top:14px;">${arenaLift >= 25 ? '✓ Arena génère un lift de conversion significatif — continue à pousser dessus.' : arenaLift > 0 ? 'Arena apporte un lift modéré. À surveiller dans le temps.' : arenaLift === 0 ? 'Arena n\'a pas d\'impact mesurable sur la conversion.' : 'Arena semble réduire la conversion. Vérifie qu\'il ne distrait pas du parcours d\'achat.'}</p>`}
+          `}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;">
+            <div class="adm-stat"><div class="k">Repeat buyers</div><div class="v">${repeatBuyers}</div><div class="s">Users avec ≥2 challenges</div></div>
+            <div class="adm-stat"><div class="k">Repeat rate</div><div class="v">${pct(repeatBuyers, payingUsers.length)}%</div><div class="s">Sur base payante</div></div>
+          </div>
+        </div>`;
+
       // ---------- 2. REVENUE / PAYOUTS / MARGE ----------
       const revenue = pays.filter(p => p.dir === "out" && p.type === "Challenge").reduce((s, p) => s + p.amount, 0);
       const payouts = pays.filter(p => p.dir === "in" && p.type === "Retrait").reduce((s, p) => s + p.amount, 0);
@@ -708,6 +800,7 @@
       return `<div style="display:flex;flex-direction:column;gap:18px;">
         ${alertsHtml}
         ${funnelHtml}
+        ${freePayingHtml}
         ${moneyHtml}
         ${passHtml}
         ${cohortsHtml}

@@ -277,11 +277,25 @@
     finally { _pendingPushes--; }
   }
 
+  // Marque l'utilisateur comme "Arena engaged" la première fois qu'il interagit
+  // (idempotent : si déjà set, on ne re-écrit pas).
+  async function markArenaEngaged() {
+    try {
+      const cached = getCachedUser();
+      if (!cached) return;
+      const c = client();
+      // On lit d'abord pour éviter d'overwrite la 1re date d'engagement
+      const { data: cur } = await c.from("profiles").select("arena_engaged_at").eq("id", cached.id).maybeSingle();
+      if (cur && cur.arena_engaged_at) return; // déjà marqué
+      await c.from("profiles").update({ arena_engaged_at: new Date().toISOString() }).eq("id", cached.id);
+    } catch (e) { console.warn("markArenaEngaged error:", e); }
+  }
+
   // -- Admin : liste tous les users (RLS doit autoriser admin) --
   async function adminListUsers() {
     try {
       const c = client();
-      const { data: profiles, error: pe } = await c.from("profiles").select("id, email, name, created_at").order("created_at", { ascending: false });
+      const { data: profiles, error: pe } = await c.from("profiles").select("id, email, name, created_at, arena_engaged_at").order("created_at", { ascending: false });
       if (pe) return { error: pe.message };
       const { data: accounts } = await c.from("accounts").select("user_id, vertical, status, phase, balance, capital, peak");
       const { data: payments } = await c.from("payments").select("user_id, type, amount, direction, at");
@@ -329,7 +343,7 @@
     // Phase 2b — data layer
     pullUserData, hydrateLocalStorage, pushAccount, pushPayment,
     deleteAllAccounts, ensureHydrated, resetHydrate,
-    adminListUsers,
+    adminListUsers, markArenaEngaged,
   };
 
   // Auto-init au chargement
