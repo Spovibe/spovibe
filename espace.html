@@ -488,6 +488,30 @@
 
     /* ---------- Marchés prédictifs (Polymarket) ---------- */
     let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "endDate";
+    let pmAutoRefreshTimer = null;  // setInterval ID quand on est sur Crypto (live 5min markets)
+    let pmLastRefreshAt = null;     // timestamp du dernier auto-refresh pour le badge UI
+
+    function startCryptoAutoRefresh() {
+      if (pmAutoRefreshTimer) return;
+      pmAutoRefreshTimer = setInterval(async () => {
+        // Self-stop si l'user a changé de catégorie ou quitté la vue prédictions
+        if (pmCategory !== "crypto" || current() !== "predictions") {
+          stopCryptoAutoRefresh(); return;
+        }
+        if (pmLoading) return;  // skip si refresh manuel déjà en cours
+        try {
+          SpovibePolymarket.clearCache();
+          await loadPolymarket(true);
+          pmLastRefreshAt = Date.now();
+        } catch (e) { console.warn("auto-refresh crypto:", e); }
+      }, 30000);
+    }
+    function stopCryptoAutoRefresh() {
+      if (pmAutoRefreshTimer) { clearInterval(pmAutoRefreshTimer); pmAutoRefreshTimer = null; }
+    }
+    // Stop quand l'user navigue ailleurs ou ferme la page
+    window.addEventListener("hashchange", () => { if (current() !== "predictions") stopCryptoAutoRefresh(); });
+    window.addEventListener("beforeunload", stopCryptoAutoRefresh);
     async function loadPolymarket(force) {
       if (pmLoading) return;
       pmLoading = true; pmError = null;
@@ -581,9 +605,19 @@
 
       if (!pmMarkets) return header + stats + info;
 
+      // Auto-refresh 30s pour la catégorie Crypto (marchés live 5min)
+      if (pmCategory === "crypto" && !pmAutoRefreshTimer) startCryptoAutoRefresh();
+
       // Catégories Spovibe avec counts
       const catStats = SpovibePolymarket.categoryStats(pmMarkets);
       const totalCount = catStats.reduce((s, c) => s + c.count, 0);
+      const ageSec = pmLastRefreshAt ? Math.floor((Date.now() - pmLastRefreshAt) / 1000) : null;
+      const liveBadge = pmCategory === "crypto" ? `
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:linear-gradient(135deg,rgba(239,68,68,0.12),rgba(239,68,68,0.04));color:#dc2626;border-radius:99px;font-size:0.78rem;font-weight:700;border:1px solid rgba(239,68,68,0.2);">
+          <span style="width:8px;height:8px;background:#dc2626;border-radius:50%;animation:sf-pulse 1.4s infinite;"></span>
+          LIVE${ageSec != null ? ' · maj ' + (ageSec < 60 ? ageSec + 's' : Math.floor(ageSec / 60) + 'm') : ''}
+        </div>
+        <style>@keyframes sf-pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.85); } }</style>` : "";
       const catsHtml = `<div class="pm-cats">
         <button class="pm-cat ${pmCategory === 'all' ? 'active' : ''}" onclick="pmSetCat('all')">Tous (${totalCount})</button>
         ${catStats.filter(c => c.count > 0).map(c => `<button class="pm-cat ${c.slug === pmCategory ? 'active' : ''}" onclick="pmSetCat('${c.slug}')">${SF.escapeHtml(c.label)} (${c.count})</button>`).join("")}
@@ -596,6 +630,7 @@
           <option value="volume" ${pmSort === 'volume' ? 'selected' : ''}>Volume total ↓</option>
           <option value="liquidity" ${pmSort === 'liquidity' ? 'selected' : ''}>Liquidité ↓</option>
         </select>
+        ${liveBadge}
       </div>`;
 
       let filtered = pmCategory === "all" ? pmMarkets : pmMarkets.filter(m => m.category === pmCategory);
@@ -1108,7 +1143,12 @@
       if (r.error) { al.textContent = r.error; al.classList.add("show"); return; }
       pmSlip = null; render();
     };
-    window.pmSetCat = cat => { pmCategory = cat; render(); };
+    window.pmSetCat = cat => {
+      pmCategory = cat;
+      // Active l'auto-refresh 30s uniquement sur Crypto (pour les marchés live 5min)
+      if (cat === "crypto") startCryptoAutoRefresh(); else stopCryptoAutoRefresh();
+      render();
+    };
     window.pmSetSearch = q => { pmSearch = q; render(); };
     window.pmSetSort = s => { pmSort = s; render(); };
     window.pmRefresh = () => { pmMarkets = null; pmError = null; SpovibePolymarket.clearCache(); loadPolymarket(true); };
