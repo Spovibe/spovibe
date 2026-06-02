@@ -55,10 +55,13 @@
       const original = submitBtn.textContent;
       submitBtn.disabled = true; submitBtn.textContent = "Création…";
       try {
+        // Après confirmation e-mail, atterrir direct sur le back office
+        const redirectTo = `${location.origin}/espace.html`;
         const res = await SF.signup(
           document.getElementById("name").value,
           document.getElementById("email").value,
-          document.getElementById("password").value
+          document.getElementById("password").value,
+          { redirectTo }
         );
         if (res.error) { alert.textContent = res.error; alert.classList.add("show"); return; }
         // Envoie un e-mail de bienvenue brandé (en plus de l'e-mail de confirmation Supabase par défaut)

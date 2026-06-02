@@ -1163,9 +1163,15 @@
     // Boot async : on attend l'hydratation Supabase avant de render,
     // sinon on afficherait un compte vide avant que les données arrivent.
     (async () => {
-      if (!SF.currentUser()) return;
       const view = document.getElementById("view");
       view.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--ink-2);"><div style="width:42px;height:42px;border:3px solid var(--lavande);border-top-color:transparent;border-radius:50%;margin:0 auto 18px;animation:sf-spin 0.8s linear infinite;"></div><div>Chargement de vos données…</div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';
+      // Attendre que Supabase ait fini son init (token exchange + session)
+      // Sinon, après un clic sur un mail de confirmation, currentUser() retourne
+      // null et on raterait l'auto-activation du challenge.
+      if (window.SpovibeAuth && SpovibeAuth.ready) {
+        try { await SpovibeAuth.ready(); } catch (e) { console.warn(e); }
+      }
+      if (!SF.currentUser()) { location.href = "login.html"; return; }
       try { await SF.dataReady(); } catch (e) { console.warn(e); }
       // Un admin n'a rien à faire ici → redirection vers la console admin
       if (SF.isAdmin()) { location.replace("admin.html"); return; }

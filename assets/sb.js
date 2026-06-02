@@ -352,8 +352,12 @@
     adminListUsers, markArenaEngaged,
   };
 
-  // Auto-init au chargement
-  init();
+  // Auto-init au chargement. La promise est exposée via SpovibeAuth.ready()
+  // pour que les pages (espace.html, challenges.html) puissent attendre la
+  // fin de l'initialisation Supabase (notamment l'exchange du token dans
+  // l'URL après confirmation e-mail) avant de checker SF.currentUser().
+  const _initPromise = init();
+  global.SpovibeAuth.ready = function ready() { return _initPromise; };
 
   // Sync entre onglets : si l'utilisateur se déconnecte ailleurs, on suit
   setTimeout(() => {

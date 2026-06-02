@@ -131,31 +131,60 @@
     };
   }
 
-  // Fetch les events actifs (qui incluent les tags + leur sous-markets).
-  // Limit réduite à 100 par page pour éviter les timeouts (le payload event est
-  // lourd : chaque event embarque sa liste de markets + tags + metadata).
+  // Détection mobile : viewport < 768px = on réduit les pages pour éviter
+  // les "Load failed" Safari Mobile sur des payloads trop gros / réseaux 4G.
+  function isMobile() {
+    try { return window.innerWidth < 768; } catch (e) { return false; }
+  }
+
+  // Fetch avec timeout explicite (AbortController). 12 s = marge confortable
+  // même sur 4G fragile, mais on coupe avant que le browser laisse traîner.
+  async function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 12000);
+    try {
+      return await fetch(url, {
+        headers: { "Accept": "application/json" },
+        signal: ctrl.signal,
+        mode: "cors",
+      });
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // Fetch les events actifs. Pagination adaptative selon mobile/desktop.
   async function fetchEventsRaw(maxPages) {
-    maxPages = maxPages || 6;  // 6 × 100 = 600 events ≈ 1800+ markets
+    // Mobile : 4 pages × 50 events = 200 events ≈ 600 markets, suffisant
+    // Desktop : 6 pages × 100 events = 600 events ≈ 1800 markets
+    const limit = isMobile() ? 50 : 100;
+    const defaultPages = isMobile() ? 4 : 6;
+    maxPages = maxPages || defaultPages;
     const all = [];
     for (let p = 0; p < maxPages; p++) {
-      const url = `${API_BASE}/events?active=true&closed=false&limit=100&offset=${p * 100}&order=volume24hr&ascending=false`;
-      // Retry une fois en cas de Load failed
+      const url = `${API_BASE}/events?active=true&closed=false&limit=${limit}&offset=${p * limit}&order=volume24hr&ascending=false`;
+      // Retry une fois en cas d'échec (timeout, réseau)
       let res = null, lastErr = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          res = await fetch(url, { headers: { "Accept": "application/json" } });
+          res = await fetchWithTimeout(url, 12000);
           if (res.ok) break;
           lastErr = "HTTP " + res.status;
         } catch (e) {
           lastErr = e.message || "réseau";
-          await new Promise(r => setTimeout(r, 400));  // attente avant retry
+          await new Promise(r => setTimeout(r, 500));  // attente avant retry
         }
       }
-      if (!res || !res.ok) throw new Error("Polymarket API: " + (lastErr || "inaccessible"));
+      if (!res || !res.ok) {
+        // Si on a déjà des events des pages précédentes, on les retourne
+        // au lieu d'échouer complètement — affichage partiel valait mieux que rien.
+        if (all.length > 0) { console.warn("Polymarket: arrêt à la page " + p + " (" + lastErr + ")"); break; }
+        throw new Error("Polymarket API: " + (lastErr || "inaccessible"));
+      }
       const batch = await res.json();
       if (!Array.isArray(batch) || batch.length === 0) break;
       all.push(...batch);
-      if (batch.length < 100) break;  // dernière page
+      if (batch.length < limit) break;  // dernière page
     }
     return all;
   }
