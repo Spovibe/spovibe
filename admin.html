@@ -86,8 +86,8 @@
     };
     const SECTIONS = [
       ["dashboard", "Vue d'ensemble", I.dash],
-      ["analytics", "Analytics", I.analyt],
-      ["risk", "Risk Reports", I.risk],
+      ["analytics", "Analyse", I.analyt],
+      ["risk", "Rapports de risque", I.risk],
       ["users", "Utilisateurs", I.users],
       ["evals", "Évaluations en cours", I.eval],
       ["funded", "Comptes financés", I.funded],
@@ -97,8 +97,8 @@
     ];
     const TITLES = {
       dashboard: ["Vue d'ensemble", "KPI globaux du système Spovibe"],
-      analytics: ["Analytics", "Funnel, marges, pass rate, cohortes et séries temporelles"],
-      risk: ["Risk Reports", "Analyse détaillée des risques par palier, vertical et profil trader"],
+      analytics: ["Analyse", "Funnel, marges, pass rate, cohortes et séries temporelles"],
+      risk: ["Rapports de risque", "Analyse détaillée des risques par palier, vertical et profil trader"],
       users: ["Utilisateurs", "Tous les comptes enregistrés"],
       evals: ["Évaluations en cours", "Challenges actifs en phase d'évaluation"],
       funded: ["Comptes financés", "Traders en phase funded avec leur P&L"],
@@ -836,13 +836,13 @@
     // =====================================================
     let _riskTab = "challenges";  // onglet actif (persiste durant la session)
     const RISK_TABS = [
-      ["challenges", "Challenge Vs Payouts"],
-      ["verticals", "Vertical Vs Payouts"],
-      ["earners", "Highest Earners"],
+      ["challenges", "Paliers vs Retraits"],
+      ["verticals", "Verticaux vs Retraits"],
+      ["earners", "Top traders payés"],
       ["losers", "Comptes financés en perte"],
-      ["lossTime", "Revenue Loss Over Time"],
-      ["status", "Account Status Analysis"],
-      ["drawdown", "Drawdown Analysis"],
+      ["lossTime", "Pertes hebdomadaires"],
+      ["status", "Analyse par statut"],
+      ["drawdown", "Analyse drawdown"],
     ];
     window.setRiskTab = (k) => { _riskTab = k; render(); };
 
@@ -887,19 +887,19 @@
       if (_riskTab === "challenges") {
         const tiers = groupByTier().sort((a, b) => b.revenue - a.revenue);
         const rows = tiers.map(t => [t.name, t.revenue, t.payouts, t.profitMargin, pct(t.profitMargin, t.revenue), t.payoutCount, t.payoutPct, t.funded]);
-        registerCsv("risk_challenges", "spovibe_risk_challenges.csv", ["Challenge", "Revenue", "Total Payouts", "Profit Margin", "Margin %", "Payout Count", "Payout %", "Funded Accounts"], rows);
+        registerCsv("risk_challenges", "spovibe_risk_paliers.csv", ["Palier", "Revenue", "Retraits totaux", "Marge brute", "Marge %", "Nb retraits", "% comptes payés", "Comptes financés"], rows);
         return `${tabsBar}
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
               <div>
-                <h3 style="margin:0;font-size:1.1rem;">Challenge Payout Statistics</h3>
+                <h3 style="margin:0;font-size:1.1rem;">Statistiques par palier</h3>
                 <p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Performance économique par palier de challenge</p>
               </div>
               ${csvBtn("risk_challenges", "Export")}
             </div>
             ${tiers.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
               <thead><tr>
-                <th>Challenge Title</th><th>Revenue</th><th>Total Payouts (after split)</th><th>Profit Margin</th><th>Payout Count</th><th>Payout Percentage</th><th>Funded Accounts Count</th>
+                <th>Palier</th><th>Revenue</th><th>Retraits totaux (après split)</th><th>Marge brute</th><th>Nb retraits</th><th>% comptes payés</th><th>Comptes financés</th>
               </tr></thead>
               <tbody>${tiers.map(t => {
                 const marginPctTier = pct(t.profitMargin, t.revenue);
@@ -945,15 +945,15 @@
           const d = data[v]; const margin = d.revenue - d.payouts;
           return [label, d.revenue, d.payouts, margin, pct(margin, d.revenue), d.count, d.active, d.passed, d.failed, d.funded];
         });
-        registerCsv("risk_verticals", "spovibe_risk_verticals.csv", ["Vertical", "Revenue", "Payouts", "Margin", "Margin %", "Total Accounts", "Active", "Passed", "Failed", "Funded"], rows);
+        registerCsv("risk_verticals", "spovibe_risk_verticaux.csv", ["Vertical", "Revenue", "Retraits", "Marge", "Marge %", "Total comptes", "Actifs", "Réussis", "Échoués", "Financés"], rows);
         return `${tabsBar}
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-              <div><h3 style="margin:0;font-size:1.1rem;">Vertical Payout Statistics</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Sports vs Prédictions — performance & distribution des comptes</p></div>
+              <div><h3 style="margin:0;font-size:1.1rem;">Statistiques par vertical</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Sports vs Prédictions — performance et distribution des comptes</p></div>
               ${csvBtn("risk_verticals", "Export")}
             </div>
             <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
-              <thead><tr><th>Vertical</th><th>Revenue</th><th>Payouts</th><th>Marge</th><th>Total comptes</th><th>Actifs</th><th>Réussis</th><th>Échoués</th><th>Financés</th></tr></thead>
+              <thead><tr><th>Vertical</th><th>Revenue</th><th>Retraits</th><th>Marge</th><th>Total comptes</th><th>Actifs</th><th>Réussis</th><th>Échoués</th><th>Financés</th></tr></thead>
               <tbody>${rows.map(r => {
                 const margin = r[3]; const marginPctV = r[4];
                 return `<tr>
@@ -991,14 +991,14 @@
           u.profit = accs.reduce((s, a) => s + (a.balance - a.capital), 0);
         }
         const list = Object.values(payoutsByUser).sort((a, b) => b.total - a.total);
-        registerCsv("risk_earners", "spovibe_risk_earners.csv",
+        registerCsv("risk_earners", "spovibe_risk_top_payes.csv",
           ["Email", "Nom", "Vertical", "Palier", "Total retiré", "Nb retraits", "Plus gros retrait", "Profit cycle", "1er retrait", "Dernier retrait"],
           list.map(u => [u.email, u.name, u.vertical, u.tier, u.total, u.count, u.max, u.profit, fmtDate(u.firstAt), fmtDate(u.lastAt)])
         );
         return `${tabsBar}
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-              <div><h3 style="margin:0;font-size:1.1rem;">Highest Earners</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Traders avec le plus de retraits cumulés — top concentration de risque payout</p></div>
+              <div><h3 style="margin:0;font-size:1.1rem;">Top traders payés</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Traders avec le plus de retraits cumulés — concentration de risque payout</p></div>
               ${csvBtn("risk_earners", "Export")}
             </div>
             ${list.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
@@ -1080,7 +1080,7 @@
           </div>
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-              <div><h3 style="margin:0;font-size:1.1rem;">Revenue Loss Over Time</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Semaines où les payouts ont dépassé le revenue</p></div>
+              <div><h3 style="margin:0;font-size:1.1rem;">Pertes hebdomadaires</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Semaines où les retraits ont dépassé le revenue</p></div>
               ${csvBtn("risk_loss_time", "Export")}
             </div>
             ${series.length ? `<div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:680px;">
@@ -1118,7 +1118,7 @@
         return `${tabsBar}
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-              <div><h3 style="margin:0;font-size:1.1rem;">Account Status Analysis</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Distribution des comptes par statut + capital total et P&L cumulé</p></div>
+              <div><h3 style="margin:0;font-size:1.1rem;">Analyse par statut de compte</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Distribution des comptes par statut + capital total et P&L cumulé</p></div>
               ${csvBtn("risk_status", "Export")}
             </div>
             <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:780px;">
@@ -1168,7 +1168,7 @@
           </div>
           <div class="card" style="padding:0;overflow:hidden;">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-              <div><h3 style="margin:0;font-size:1.1rem;">Drawdown Analysis</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Drawdown consommé par compte vs DD autorisé du palier</p></div>
+              <div><h3 style="margin:0;font-size:1.1rem;">Analyse du drawdown</h3><p class="muted" style="margin:2px 0 0;font-size:0.82rem;">Drawdown consommé par compte vs DD autorisé du palier</p></div>
               ${csvBtn("risk_drawdown", "Export")}
             </div>
             <div style="overflow-x:auto;"><table class="risk-table" style="width:100%;border-collapse:collapse;min-width:920px;">
