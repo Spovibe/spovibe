@@ -104,29 +104,50 @@
       }
     }
 
-    // Labels YES/NO intelligents :
-    // - Si groupItemTitle est défini ET l'event a EXACTEMENT 1 autre sous-marché
-    //   avec un groupItemTitle valide → choix binaire (ex tennis Mensik vs Fonseca)
-    //   YES = ce contestant, NO = l'autre.
-    // - Sinon : "Oui" / "Non" en français.
+    // Labels YES/NO intelligents — 3 cas dans l'ordre de priorité :
+    //   1. Si les outcomes Polymarket sont CUSTOM (ex Up/Down pour BTC, ou
+    //      Hausse/Baisse, etc.) → on les utilise tels quels, traduits si possible.
+    //   2. Sinon, si groupItemTitle existe ET event a 1 autre sous-marché → match
+    //      binaire (ex tennis Mensik vs Fonseca). YES = ce contestant, NO = l'autre.
+    //   3. Sinon, défaut Oui / Non en français.
     const groupItemTitle = m.groupItemTitle || null;
     const siblings = (event.markets || []).filter(s => s.id !== m.id);
     const otherContestants = siblings
       .filter(s => s.groupItemTitle && !/^(other|autre)$/i.test(s.groupItemTitle))
       .map(s => s.groupItemTitle);
+
+    // Mini-dictionnaire de traduction des outcomes Polymarket → labels Spovibe FR
+    const OUTCOME_TRANSLATIONS = {
+      "up": "Up", "down": "Down",          // crypto direction — l'user l'a explicitement demandé en EN
+      "hausse": "Hausse", "baisse": "Baisse",
+      "over": "Over", "under": "Under",
+      "yes": "Oui", "no": "Non",
+    };
+    function translateOutcome(o) {
+      if (!o) return null;
+      const key = String(o).toLowerCase().trim();
+      return OUTCOME_TRANSLATIONS[key] || o;  // fallback : valeur brute
+    }
+
     let yesLabel = "Oui";
     let noLabel = "Non";
-    if (groupItemTitle && !/^(other|autre)$/i.test(groupItemTitle)) {
+    const out0 = (outcomes[0] || "").toLowerCase();
+    const customOutcomes = out0 && out0 !== "yes";
+    if (customOutcomes) {
+      // Cas 1 : outcomes custom (Up/Down etc.) — on utilise tels quels
+      yesLabel = translateOutcome(outcomes[0]);
+      noLabel = translateOutcome(outcomes[1]);
+    } else if (groupItemTitle && !/^(other|autre)$/i.test(groupItemTitle)) {
+      // Cas 2 : match binaire (tennis, etc.) ou multi-outcome (group winner)
       if (otherContestants.length === 1) {
-        // Match binaire : "Mensik" vs "Fonseca"
         yesLabel = groupItemTitle;
         noLabel = otherContestants[0];
       } else if (otherContestants.length > 1) {
-        // Multi-outcome (ex Group A winner avec 4 teams) : YES = ce contestant, NO = "Autre"
         yesLabel = groupItemTitle;
         noLabel = "Autre";
       }
     }
+    // Cas 3 : Oui / Non par défaut (cas marchés YES/NO classiques sans groupItem)
 
     return {
       id: m.id,
