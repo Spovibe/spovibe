@@ -486,7 +486,8 @@
       return sorted.map(p => {
         const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
         const pricePct = Math.round(Number(p.price_at_entry) * 100);
-        const sideLabel = p.side || "Yes";
+        // Affiche le nom du contestant (Auger-Aliassime, Up, Trump…) au lieu de Yes/No
+        const sideLabel = p.side_label || p.side || "Yes";
         const cote = (1 / Number(p.price_at_entry)).toFixed(2);
         let badge = "", pnlBlock = "";
         if (p.status === "open") {
@@ -507,7 +508,7 @@
           badge = `<span style="background:var(--bg-2);color:var(--muted);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">Annulé 50-50</span>`;
           pnlBlock = `<div class="muted">${SF.fmt2(p.stake)}</div>`;
         }
-        return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);">
+        return `<div onclick="pmShowPositionDetails('${p.id}')" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.12s;" onmouseenter="this.style.background='rgba(124,107,246,0.04)'" onmouseleave="this.style.background='transparent'">
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
               ${badge}
@@ -516,7 +517,7 @@
             <b style="display:block;line-height:1.35;font-size:0.94rem;">${SF.escapeHtml(p.market_question || "Marché")}</b>
             <div class="muted" style="font-size:0.82rem;margin-top:4px;">Pari sur <b style="color:var(--text);">${SF.escapeHtml(sideLabel)}</b> à ${pricePct}¢ · cote ×${cote}</div>
           </div>
-          <div style="text-align:right;flex:0 0 auto;">${pnlBlock}</div>
+          <div style="text-align:right;flex:0 0 auto;">${pnlBlock}<div class="muted" style="font-size:0.7rem;margin-top:4px;">Détails →</div></div>
         </div>`;
       }).join("");
     }
@@ -1422,6 +1423,104 @@
       if (modalEl) modalEl.remove();
       document.body.classList.remove("pm-slip-open");
     }
+
+    // Modale détails d'une position (cliquée depuis l'historique)
+    window.pmShowPositionDetails = (positionId) => {
+      const positions = pmPositions || [];
+      const p = positions.find(x => x.id === positionId);
+      if (!p) return;
+      const sideLabel = p.side_label || p.side || "Yes";
+      const pricePct = Math.round(Number(p.price_at_entry) * 100);
+      const cote = (1 / Number(p.price_at_entry)).toFixed(2);
+      const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+      const end = p.end_date ? fmtEndFullGlobal(p.end_date) : "—";
+      const stake = Number(p.stake);
+      const potentialPayout = Number(p.shares);
+      const potentialProfit = potentialPayout - stake;
+      // Bloc selon le statut
+      let statusBlock = "";
+      if (p.status === "open") {
+        const endMs = p.end_date ? new Date(p.end_date).getTime() : null;
+        const isExpired = endMs && endMs < Date.now();
+        statusBlock = `
+          <div style="background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(34,197,94,0.02));border:1px solid rgba(34,197,94,0.18);border-radius:12px;padding:14px 16px;margin:14px 0;">
+            <div style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:700;margin-bottom:6px;">Si "${SF.escapeHtml(sideLabel)}" gagne</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:0.78rem;color:var(--muted);">Tu reçois</div>
+                <div style="font-size:1.6rem;font-weight:800;color:#16a34a;line-height:1.1;">${SF.fmt2(potentialPayout)} €</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.78rem;color:var(--muted);">Profit net</div>
+                <div style="font-size:1rem;font-weight:700;color:#16a34a;">+${SF.fmt2(potentialProfit)} €</div>
+              </div>
+            </div>
+          </div>
+          ${isExpired ? `<div class="muted" style="font-size:0.84rem;background:rgba(249,115,22,0.08);border-left:3px solid #ea580c;padding:10px 12px;border-radius:8px;margin-top:8px;">⏳ Le marché est fermé. La résolution Polymarket peut prendre quelques heures à confirmer.</div>` : ''}
+        `;
+      } else if (p.status === "won") {
+        const profit = Number(p.payout) - stake;
+        statusBlock = `
+          <div style="background:linear-gradient(135deg,rgba(34,197,94,0.12),rgba(34,197,94,0.04));border:1px solid #16a34a;border-radius:12px;padding:14px 16px;margin:14px 0;">
+            <div style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:#16a34a;font-weight:700;margin-bottom:6px;">✓ Pari gagné</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:0.78rem;color:var(--muted);">Tu as reçu</div>
+                <div style="font-size:1.6rem;font-weight:800;color:#16a34a;line-height:1.1;">${SF.fmt2(Number(p.payout))} €</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.78rem;color:var(--muted);">Profit net</div>
+                <div style="font-size:1rem;font-weight:700;color:#16a34a;">+${SF.fmt2(profit)} €</div>
+              </div>
+            </div>
+          </div>`;
+      } else if (p.status === "lost") {
+        statusBlock = `
+          <div style="background:linear-gradient(135deg,rgba(239,68,68,0.10),rgba(239,68,68,0.02));border:1px solid #dc2626;border-radius:12px;padding:14px 16px;margin:14px 0;">
+            <div style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:#dc2626;font-weight:700;margin-bottom:6px;">✗ Pari perdu</div>
+            <div style="font-size:0.78rem;color:var(--muted);">Perte</div>
+            <div style="font-size:1.6rem;font-weight:800;color:#dc2626;line-height:1.1;">−${SF.fmt2(stake)} €</div>
+            ${p.resolved_outcome ? `<div class="muted" style="font-size:0.78rem;margin-top:6px;">Résultat : <b style="color:var(--text);">${SF.escapeHtml(p.resolved_outcome)}</b> a gagné</div>` : ''}
+          </div>`;
+      } else if (p.status === "cancelled") {
+        statusBlock = `
+          <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:14px 0;">
+            <div style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:700;margin-bottom:6px;">Annulé · 50-50</div>
+            <div class="muted" style="font-size:0.86rem;">Le marché n'a pas eu de résultat clair. Ta mise t'a été remboursée.</div>
+          </div>`;
+      }
+
+      const innerHtml = `
+        <div class="pm-slip" id="pmSlipBox">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <b style="font-size:1.05rem;">Détails de la position</b>
+            <button class="btn btn-ghost btn-sm" onclick="pmClear()" style="padding:6px 12px;font-size:0.84rem;">✕ Fermer</button>
+          </div>
+          <div style="font-size:0.95rem;line-height:1.4;margin-bottom:6px;"><b>${SF.escapeHtml(p.market_question || "Marché")}</b></div>
+          <div class="muted" style="font-size:0.8rem;margin-bottom:14px;">${SF.escapeHtml(p.event_title || "")} · ${SF.escapeHtml(p.category || "Autres")}</div>
+
+          ${statusBlock}
+
+          <div style="background:var(--bg-2);border-radius:10px;padding:12px 14px;font-size:0.86rem;line-height:1.7;">
+            <div style="display:flex;justify-content:space-between;"><span class="muted">Côté pris</span><b>${SF.escapeHtml(sideLabel)}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span class="muted">Prix d'entrée</span><b>${pricePct}¢ · cote ×${cote}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span class="muted">Mise</span><b>${SF.fmt2(stake)} €</b></div>
+            <div style="display:flex;justify-content:space-between;"><span class="muted">Shares achetées</span><b>${SF.fmt2(Number(p.shares))}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span class="muted">Pari placé le</span><b>${dt}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:8px;"><span class="muted">Résolution</span><b style="text-align:right;font-size:0.78rem;">${end}</b></div>
+          </div>
+        </div>`;
+      let modalEl = document.getElementById("pmModalRoot");
+      if (!modalEl) {
+        modalEl = document.createElement("div");
+        modalEl.id = "pmModalRoot";
+        modalEl.className = "pm-modal-backdrop";
+        modalEl.addEventListener("click", (e) => { if (e.target === modalEl) pmClear(); });
+        document.body.appendChild(modalEl);
+      }
+      modalEl.innerHTML = innerHtml;
+      document.body.classList.add("pm-slip-open");
+    };
 
     // Met à jour en live le simulateur de gain pendant que l'user tape sa mise
     window.pmUpdateSim = () => {

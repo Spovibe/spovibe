@@ -922,7 +922,16 @@ textarea.input { min-height: 150px; resize: vertical; line-height: 1.6; }
 .gauge-fill.gold { background: linear-gradient(90deg, var(--orange), var(--orange-2)); }
 .gauge-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
 
-.rule-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--border); font-size: 0.93rem; }
+.rule-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); font-size: 0.93rem; flex-wrap: wrap; }
+.rule-row > :first-child { flex: 0 0 auto; min-width: 0; }
+.rule-row > :last-child { flex: 1 1 auto; text-align: right; min-width: 0; }
+@media (max-width: 640px) {
+  .rule-row { padding: 11px 0; font-size: 0.86rem; gap: 8px; }
+  /* Sur mobile : si le label ET la valeur sont trop longs, on accepte qu'ils
+     se mettent l'un en dessous de l'autre. Label à gauche, valeur à droite. */
+  .rule-row > :first-child { flex: 1 1 50%; }
+  .rule-row > :last-child { flex: 1 1 auto; }
+}
 .rule-row:last-child { border-bottom: 0; }
 .rule-row .ok { color: var(--green); font-weight: 700; }
 .rule-row .bad { color: var(--red); font-weight: 700; }

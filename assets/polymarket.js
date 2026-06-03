@@ -384,6 +384,7 @@
       if (stake > maxStake) return { error: `Mise > exposition max (${acc.tier.maxStakePct}% = ${Math.round(maxStake)} €).` };
     }
     const shares = stake / price;
+    const sideLabel = side === "Yes" ? (market.yesLabel || "Oui") : (market.noLabel || "Non");
     const c = global.SpovibeAuth.client();
     const { data, error } = await c.from("predictions_positions").insert({
       user_id: u.id,
@@ -397,6 +398,7 @@
       category: market.category,
       end_date: market.endDate ? new Date(market.endDate).toISOString() : null,
       side,
+      side_label: sideLabel,
       price_at_entry: price,
       stake,
       shares,
