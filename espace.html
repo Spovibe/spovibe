@@ -467,8 +467,7 @@
         if (acc.bets.length === 0) return '<div class="empty">Aucune activité pour le moment.</div>';
         return `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Événement</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th><th>Solde</th></tr></thead><tbody>${acc.bets.map(b => `<tr><td class="muted">${SF.fmtDate(b.date)}</td><td>${SF.escapeHtml(b.event)}</td><td>${SF.fmt2(b.stake)}</td><td>${b.odds.toFixed(2)}</td><td>${b.result === "win" ? '<span class="pos">Gagné</span>' : '<span class="neg">Perdu</span>'}</td><td class="${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</td><td>${SF.fmt2(b.balanceAfter)}</td></tr>`).join("")}</tbody></table></div>`;
       }
-      // Prédictions : on tire depuis le cache pmPositions (chargé async).
-      // Si pas encore chargé, on lance le chargement et on affiche un loader.
+      // Prédictions : cards stackées (mobile-friendly) au lieu d'une table.
       if (pmPositions === null && !pmPositionsLoading) {
         loadPositions();
         return '<div class="empty">Chargement de l\'historique…</div>';
@@ -478,45 +477,48 @@
       }
       const positions = pmPositions || [];
       if (positions.length === 0) return '<div class="empty">Aucune activité pour le moment.</div>';
-      // Tri par date décroissante (plus récente en premier)
+      // Tri par date décroissante
       const sorted = positions.slice().sort((a, b) => {
         const ta = a.opened_at ? new Date(a.opened_at).getTime() : 0;
         const tb = b.opened_at ? new Date(b.opened_at).getTime() : 0;
         return tb - ta;
       });
-      const rows = sorted.map(p => {
+      return sorted.map(p => {
         const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
         const pricePct = Math.round(Number(p.price_at_entry) * 100);
         const sideLabel = p.side || "Yes";
-        let resultCell = "—", pnlCell = "—", pnlClass = "muted";
+        const cote = (1 / Number(p.price_at_entry)).toFixed(2);
+        let badge = "", pnlBlock = "";
         if (p.status === "open") {
           const endMs = p.end_date ? new Date(p.end_date).getTime() : null;
           const isExpired = endMs && endMs < Date.now();
-          resultCell = isExpired
-            ? '<span style="color:#ea580c;font-weight:700;">Résolution en attente</span>'
-            : '<span style="color:var(--lavande);font-weight:700;">En cours</span>';
-          pnlCell = "—"; pnlClass = "muted";
+          badge = isExpired
+            ? `<span style="background:rgba(249,115,22,0.14);color:#ea580c;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">Résolution en attente</span>`
+            : `<span style="background:rgba(124,107,246,0.12);color:var(--lavande);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">En cours</span>`;
+          pnlBlock = `<div style="color:var(--muted);font-size:0.82rem;">mise ${SF.fmt2(p.stake)}</div>`;
         } else if (p.status === "won") {
           const profit = Number(p.payout) - Number(p.stake);
-          resultCell = '<span class="pos">Gagné</span>';
-          pnlCell = "+" + SF.fmt2(profit); pnlClass = "pos";
+          badge = `<span style="background:rgba(34,197,94,0.14);color:#16a34a;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">Gagné ✓</span>`;
+          pnlBlock = `<div style="color:#16a34a;font-weight:700;font-size:1rem;">+${SF.fmt2(profit)}</div><div class="muted" style="font-size:0.74rem;">payout ${SF.fmt2(p.payout)}</div>`;
         } else if (p.status === "lost") {
-          resultCell = '<span class="neg">Perdu</span>';
-          pnlCell = "−" + SF.fmt2(p.stake); pnlClass = "neg";
+          badge = `<span style="background:rgba(239,68,68,0.14);color:#dc2626;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">Perdu ✗</span>`;
+          pnlBlock = `<div style="color:#dc2626;font-weight:700;font-size:1rem;">−${SF.fmt2(p.stake)}</div>`;
         } else if (p.status === "cancelled") {
-          resultCell = '<span class="muted">Annulé (50-50)</span>';
-          pnlCell = "0,00"; pnlClass = "muted";
+          badge = `<span style="background:var(--bg-2);color:var(--muted);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">Annulé 50-50</span>`;
+          pnlBlock = `<div class="muted">${SF.fmt2(p.stake)}</div>`;
         }
-        return `<tr>
-          <td class="muted">${dt}</td>
-          <td>${SF.escapeHtml(p.market_question || "Marché")}<div class="muted" style="font-size:0.74rem;">${SF.escapeHtml(sideLabel)} @ ${pricePct}¢</div></td>
-          <td>${SF.fmt2(p.stake)}</td>
-          <td>×${(1 / Number(p.price_at_entry)).toFixed(2)}</td>
-          <td>${resultCell}</td>
-          <td class="${pnlClass}">${pnlCell}</td>
-        </tr>`;
+        return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+              ${badge}
+              <span class="muted" style="font-size:0.74rem;">${dt}</span>
+            </div>
+            <b style="display:block;line-height:1.35;font-size:0.94rem;">${SF.escapeHtml(p.market_question || "Marché")}</b>
+            <div class="muted" style="font-size:0.82rem;margin-top:4px;">Pari sur <b style="color:var(--text);">${SF.escapeHtml(sideLabel)}</b> à ${pricePct}¢ · cote ×${cote}</div>
+          </div>
+          <div style="text-align:right;flex:0 0 auto;">${pnlBlock}</div>
+        </div>`;
       }).join("");
-      return `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Marché</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
 
     function viewChallenges() {

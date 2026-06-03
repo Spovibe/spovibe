@@ -671,8 +671,20 @@ body.pm-slip-open { overflow: hidden; }
   .hero-bo h2 { font-size: 1.4rem; }
   .hero-bo .h-amt { font-size: 1.8rem; }
   .kpi-grid { grid-template-columns: 1fr 1fr !important; gap: 10px; }
-  .kpi { padding: 14px; }
-  .kpi .v { font-size: 1.2rem; }
+  .kpi { padding: 14px 12px; min-width: 0; overflow: hidden; }
+  .kpi .k { font-size: 0.68rem; letter-spacing: 0.1em; }
+  /* Valeur : nowrap + ellipsis + tabular nums pour les € qui débordent */
+  .kpi .v { font-size: 1.05rem; letter-spacing: -0.02em; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+/* Très petits écrans (iPhone SE etc.) : encore plus compact */
+@media (max-width: 400px) {
+  .kpi { padding: 12px 10px; }
+  .kpi .v { font-size: 0.95rem; }
+  .kpi .k, .kpi .sub { font-size: 0.66rem; }
+}
+@media (max-width: 640px) {
   .dash-h h1 { font-size: 1.3rem; }
   .dash-h { gap: 8px; }
   .pm-grid { grid-template-columns: 1fr; }
