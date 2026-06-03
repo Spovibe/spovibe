@@ -421,22 +421,32 @@
     const c = global.SpovibeAuth.client();
     const { data: openPositions } = await c.from("predictions_positions").select("*").eq("user_id", u.id).eq("status", "open");
     let settled = 0, errors = 0;
+    const now = Date.now();
     for (const pos of (openPositions || [])) {
       try {
+        // Optimisation : ne pas appeler l'API Polymarket si le marché n'est pas
+        // encore expiré (resolution date dans le futur).
+        if (pos.end_date) {
+          const endMs = new Date(pos.end_date).getTime();
+          if (!isNaN(endMs) && endMs > now + 60000) continue;  // marge 1 min
+        }
         const res = await checkResolution(pos.market_id);
         if (!res.resolved) continue;
         let status = "lost", payout = 0;
-        if (res.winner === "50-50") { status = "cancelled"; payout = pos.stake; }
-        else if (res.winner === pos.side) { status = "won"; payout = pos.shares; }
+        if (res.winner === "50-50") { status = "cancelled"; payout = Number(pos.stake); }
+        else if (res.winner === pos.side) { status = "won"; payout = Number(pos.shares); }
         else { status = "lost"; payout = 0; }
         await c.from("predictions_positions").update({
           status, resolved_outcome: res.winner, payout, settled_at: new Date().toISOString(),
         }).eq("id", pos.id);
-        // Crédite le compte
+        // Mise à jour du compte : crédit + clear pending (peu importe le statut)
         const acc = global.SF.predictionsAccount();
-        if (acc && payout > 0) {
-          acc.balance = Math.round((acc.balance + payout) * 100) / 100;
-          acc.peak = Math.max(acc.peak || acc.capital, acc.balance);
+        if (acc) {
+          if (payout > 0) {
+            acc.balance = Math.round((acc.balance + payout) * 100) / 100;
+            acc.peak = Math.max(acc.peak || acc.capital, acc.balance);
+          }
+          // Vide la position du pending qu'elle soit gagnée OU perdue OU annulée
           acc.pending = (acc.pending || []).filter(p => p.positionId !== pos.id);
           global.SF.saveAccount(acc);
         }

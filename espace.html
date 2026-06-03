@@ -498,8 +498,15 @@
       if (pmPositions && !force) return;
       pmPositionsLoading = true;
       try {
-        if (window.SpovibePolymarket && SpovibePolymarket.listAllPositions) {
-          pmPositions = await SpovibePolymarket.listAllPositions();
+        if (window.SpovibePolymarket) {
+          // Auto-settle d'abord : pour chaque position open dont le marché est résolu,
+          // on règle automatiquement (won/lost/cancelled) + crédit balance si gagnant.
+          if (SpovibePolymarket.settleMyOpenPositions) {
+            try { await SpovibePolymarket.settleMyOpenPositions(); } catch (e) { console.warn("auto-settle:", e); }
+          }
+          if (SpovibePolymarket.listAllPositions) {
+            pmPositions = await SpovibePolymarket.listAllPositions();
+          } else { pmPositions = []; }
         } else {
           pmPositions = [];
         }
@@ -640,7 +647,11 @@
             const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
             let badge = "", pnl = "";
             if (p.status === "open") {
-              badge = `<span style="background:rgba(124,107,246,0.12);color:var(--lavande);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">En cours</span>`;
+              const endMs = p.end_date ? new Date(p.end_date).getTime() : null;
+              const isExpired = endMs && endMs < Date.now();
+              badge = isExpired
+                ? `<span style="background:rgba(249,115,22,0.14);color:#ea580c;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Résolution en attente</span>`
+                : `<span style="background:rgba(124,107,246,0.12);color:var(--lavande);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">En cours</span>`;
               pnl = `<div class="muted" style="font-size:0.8rem;">mise ${SF.fmt2(p.stake)}</div>`;
             } else if (p.status === "won") {
               const profit = Number(p.payout) - Number(p.stake);
