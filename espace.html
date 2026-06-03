@@ -490,6 +490,23 @@
     let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "endDate";
     let pmAutoRefreshTimer = null;  // setInterval ID quand on est sur Crypto (live 5min markets)
     let pmLastRefreshAt = null;     // timestamp du dernier auto-refresh pour le badge UI
+    let pmPositions = null, pmPositionsLoading = false;
+
+    // Pull l'historique complet des positions Polymarket de l'user depuis Supabase
+    async function loadPositions(force) {
+      if (pmPositionsLoading) return;
+      if (pmPositions && !force) return;
+      pmPositionsLoading = true;
+      try {
+        if (window.SpovibePolymarket && SpovibePolymarket.listAllPositions) {
+          pmPositions = await SpovibePolymarket.listAllPositions();
+        } else {
+          pmPositions = [];
+        }
+      } catch (e) { console.warn(e); pmPositions = []; }
+      pmPositionsLoading = false;
+      if (current() === "predictions") render();
+    }
 
     function startCryptoAutoRefresh() {
       if (pmAutoRefreshTimer) return;
@@ -533,6 +550,8 @@
       const locked = !isActive;
       // Charge les marchés dans tous les cas
       if (pmMarkets === null && !pmLoading) loadPolymarket();
+      // Charge l'historique des positions au 1er affichage (pour user actif)
+      if (isActive && pmPositions === null && !pmPositionsLoading) loadPositions();
 
       let header = "";
       if (locked) {
@@ -560,7 +579,7 @@
       let stats;
       if (isActive) {
         const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100;
-        const pend = (acc.pending || []).filter(p => p.kind === "prediction");
+        const pend = (acc.pending || []).filter(p => p.kind === "prediction" || p.kind === "polymarket");
         stats = `<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
           <div class="kpi"><div class="k">Solde disponible</div><div class="v">${SF.fmt2(avail)}</div><div class="sub">sur ${SF.fmt2(acc.balance)}</div></div>
           <div class="kpi"><div class="k">Mise max / position</div><div class="v">${SF.fmt(maxStake)}</div><div class="sub">${acc.tier.maxStakePct}% du capital</div></div>
@@ -599,11 +618,72 @@
 
       let pendHtml = "";
       if (isActive) {
-        const pend = (acc.pending || []).filter(p => p.kind === "prediction");
-        if (pend.length) pendHtml = `<div class="card" style="margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3>Positions en cours (${pend.length})</h3><button class="btn btn-primary btn-sm" onclick="doSettle('predictions')">Simuler les résultats</button></div>${pend.map(p => `<div class="pending-row"><div><b>${SF.escapeHtml(p.event)}</b><div class="muted" style="font-size:0.8rem;">${p.pickName} @ ${Math.round((p.price || 1 / p.odds) * 100)}¢</div></div><div style="text-align:right;"><div>${SF.fmt2(p.stake)}</div><div class="muted" style="font-size:0.8rem;">gain ${SF.fmt2(p.stake * p.odds)}</div></div></div>`).join("")}</div>`;
+        const pend = (acc.pending || []).filter(p => p.kind === "prediction" || p.kind === "polymarket");
+        if (pend.length) pendHtml = `<div class="card" style="margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3>Positions en cours (${pend.length})</h3><button class="btn btn-primary btn-sm" onclick="doSettle('predictions')">Simuler les résultats</button></div>${pend.map(p => `<div class="pending-row"><div><b>${SF.escapeHtml(p.event || p.question || "Marché")}</b><div class="muted" style="font-size:0.8rem;">${SF.escapeHtml(p.pickName || p.side || "Yes")} @ ${Math.round((p.price || 1 / (p.odds || 1)) * 100)}¢</div></div><div style="text-align:right;"><div>${SF.fmt2(p.stake)}</div><div class="muted" style="font-size:0.8rem;">${p.odds ? 'gain ' + SF.fmt2(p.stake * p.odds) : ''}</div></div></div>`).join("")}</div>`;
       }
 
-      if (!pmMarkets) return header + stats + info;
+      // ---------- Historique des positions (depuis Supabase) ----------
+      let historyHtml = "";
+      if (isActive) {
+        const positions = pmPositions || [];
+        const open = positions.filter(p => p.status === "open");
+        const settled = positions.filter(p => p.status !== "open").slice(0, 20);  // 20 dernières
+        if (pmPositionsLoading && !positions.length) {
+          historyHtml = `<div class="card" style="margin-bottom:18px;"><h3 style="margin-bottom:10px;">Mes positions</h3><p class="muted">Chargement de l'historique…</p></div>`;
+        } else if (positions.length) {
+          const totalWon = positions.filter(p => p.status === "won").reduce((s, p) => s + Number(p.payout || 0) - Number(p.stake || 0), 0);
+          const totalLost = positions.filter(p => p.status === "lost").reduce((s, p) => s + Number(p.stake || 0), 0);
+          const pnlHistory = totalWon - totalLost;
+          const formatPos = p => {
+            const sideLabel = p.side === "Yes" ? "Yes" : "No";
+            const pricePct = Math.round(Number(p.price_at_entry) * 100);
+            const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+            let badge = "", pnl = "";
+            if (p.status === "open") {
+              badge = `<span style="background:rgba(124,107,246,0.12);color:var(--lavande);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">En cours</span>`;
+              pnl = `<div class="muted" style="font-size:0.8rem;">mise ${SF.fmt2(p.stake)}</div>`;
+            } else if (p.status === "won") {
+              const profit = Number(p.payout) - Number(p.stake);
+              badge = `<span style="background:rgba(34,197,94,0.14);color:#16a34a;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Gagné ✓</span>`;
+              pnl = `<div style="color:#16a34a;font-weight:700;">+${SF.fmt2(profit)}</div><div class="muted" style="font-size:0.78rem;">payout ${SF.fmt2(p.payout)}</div>`;
+            } else if (p.status === "lost") {
+              badge = `<span style="background:rgba(239,68,68,0.14);color:#dc2626;padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">Perdu ✗</span>`;
+              pnl = `<div style="color:#dc2626;font-weight:700;">−${SF.fmt2(p.stake)}</div>`;
+            } else {
+              badge = `<span style="background:var(--bg-2);color:var(--muted);padding:3px 9px;border-radius:99px;font-size:0.72rem;font-weight:700;">${p.status}</span>`;
+              pnl = `<div class="muted">${SF.fmt2(p.stake)}</div>`;
+            }
+            return `<div class="pending-row" style="align-items:flex-start;">
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+                  ${badge}
+                  <span class="muted" style="font-size:0.74rem;">${dt}</span>
+                </div>
+                <b style="display:block;line-height:1.4;">${SF.escapeHtml(p.market_question || "Marché")}</b>
+                <div class="muted" style="font-size:0.82rem;margin-top:2px;">Pari sur <b style="color:var(--text);">${SF.escapeHtml(sideLabel)}</b> à ${pricePct}¢ · ${SF.escapeHtml(p.category || "Autres")}</div>
+                ${p.resolved_outcome ? `<div class="muted" style="font-size:0.78rem;margin-top:3px;">Résultat : <b style="color:var(--text);">${SF.escapeHtml(p.resolved_outcome)}</b></div>` : ""}
+              </div>
+              <div style="text-align:right;flex:0 0 auto;margin-left:12px;">${pnl}</div>
+            </div>`;
+          };
+          historyHtml = `<div class="card" style="margin-bottom:18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+              <h3 style="margin:0;">Mes positions (${positions.length})</h3>
+              <div style="display:flex;gap:14px;font-size:0.84rem;">
+                <span>P&L cumulé : <b style="color:${pnlHistory >= 0 ? '#16a34a' : '#dc2626'};">${pnlHistory >= 0 ? '+' : ''}${SF.fmt2(pnlHistory)}</b></span>
+                <button class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:0.78rem;" onclick="loadPositions(true)">Actualiser</button>
+              </div>
+            </div>
+            ${open.length ? `<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);font-weight:700;margin:14px 0 8px;">${open.length} ouverte${open.length > 1 ? 's' : ''}</div>${open.map(formatPos).join("")}` : ''}
+            ${settled.length ? `<div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);font-weight:700;margin:18px 0 8px;">Réglées (${settled.length} dernières)</div>${settled.map(formatPos).join("")}` : ''}
+            ${positions.length > 20 + open.length ? `<p class="muted" style="font-size:0.78rem;margin-top:14px;text-align:center;">Plus de ${20} positions réglées dans l'historique. Affichage limité aux 20 dernières.</p>` : ''}
+          </div>`;
+        } else {
+          historyHtml = `<div class="card" style="margin-bottom:18px;padding:30px;text-align:center;"><h3 style="margin-bottom:6px;">Pas encore de positions</h3><p class="muted">Tes positions Polymarket apparaîtront ici dès ta première mise.</p></div>`;
+        }
+      }
+
+      if (!pmMarkets) return header + stats + info + historyHtml;
 
       // Auto-refresh 30s pour la catégorie Crypto (marchés live 5min)
       if (pmCategory === "crypto" && !pmAutoRefreshTimer) startCryptoAutoRefresh();
@@ -669,7 +749,7 @@
         ? `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Marchés en direct depuis <b style="color:var(--text)">Polymarket</b>. <a href="challenges.html?v=predictions" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour trader avec une bankroll jusqu'à 100 000 €.</p>`
         : `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Données en direct depuis <b style="color:var(--text)">Polymarket</b> (Gamma API publique). Tes positions sont en monnaie virtuelle et impactent la bankroll de ton challenge selon les mêmes règles que les paris sportifs.</p>`;
 
-      return header + stats + info + slipHtml + pendHtml + catsHtml + `<div class="pm-grid">${cards || '<p class="muted">Aucun marché dans cette catégorie.</p>'}</div>` + footNote;
+      return header + stats + info + slipHtml + pendHtml + historyHtml + catsHtml + `<div class="pm-grid">${cards || '<p class="muted">Aucun marché dans cette catégorie.</p>'}</div>` + footNote;
     }
 
     /* ---------- Arena (univers complet) ---------- */
