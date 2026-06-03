@@ -1289,6 +1289,7 @@
       const deadlineLine = market && market.endDate
         ? `<div class="muted" style="font-size:0.8rem;margin:6px 0 10px;background:rgba(124,107,246,0.06);border-radius:8px;padding:8px 12px;">⏰ <b style="color:var(--text)">Résolution</b> : ${fmtEndFullGlobal(market.endDate)}</div>`
         : "";
+      const multiplier = 1 / pmSlip.price;
       const innerHtml = `
         <div class="pm-slip" id="pmSlipBox">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -1296,17 +1297,30 @@
             <button class="btn btn-ghost btn-sm" onclick="pmClear()" style="padding:6px 12px;font-size:0.84rem;">✕ Fermer</button>
           </div>
           <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
-          <div class="pm-slip-side ${sideClass}">${sideLabel} · ${pricePct}¢</div>
+          <div class="pm-slip-side ${sideClass}">${sideLabel} · ${pricePct}¢ · cote ×${multiplier.toFixed(2)}</div>
           ${deadlineLine}
           <div class="alert error" id="pmAlert"></div>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
             <div class="field" style="margin:0;flex:1;min-width:160px;">
               <label>Mise (€) · max ${SF.fmt(maxStake)}</label>
-              <input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}" autofocus>
+              <input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}" oninput="pmUpdateSim()" autofocus>
             </div>
             <button class="btn btn-primary" onclick="pmConfirm()">Placer la position</button>
           </div>
-          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${sideLabel}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
+          <div id="pmSim" style="margin-top:14px;padding:14px 16px;background:linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02));border:1px solid rgba(34,197,94,0.18);border-radius:12px;">
+            <div style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:700;margin-bottom:6px;">Si ${sideLabel} se réalise</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:0.78rem;color:var(--muted);">Tu reçois</div>
+                <div id="pmSimPayout" style="font-size:1.6rem;font-weight:800;color:#16a34a;line-height:1.1;">—</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.78rem;color:var(--muted);">Profit net</div>
+                <div id="pmSimProfit" style="font-size:1rem;font-weight:700;color:#16a34a;">—</div>
+              </div>
+            </div>
+            <div id="pmSimWarning" style="font-size:0.76rem;color:#ea580c;margin-top:8px;display:none;"></div>
+          </div>
         </div>`;
       let modalEl = document.getElementById("pmModalRoot");
       if (!modalEl) {
@@ -1330,6 +1344,43 @@
       if (modalEl) modalEl.remove();
       document.body.classList.remove("pm-slip-open");
     }
+
+    // Met à jour en live le simulateur de gain pendant que l'user tape sa mise
+    window.pmUpdateSim = () => {
+      if (!pmSlip) return;
+      const stakeInput = document.getElementById("pmStake");
+      const payoutEl = document.getElementById("pmSimPayout");
+      const profitEl = document.getElementById("pmSimProfit");
+      const warnEl = document.getElementById("pmSimWarning");
+      if (!stakeInput || !payoutEl || !profitEl) return;
+      const stake = Number(stakeInput.value);
+      if (!stake || stake <= 0 || isNaN(stake)) {
+        payoutEl.textContent = "—";
+        profitEl.textContent = "—";
+        if (warnEl) warnEl.style.display = "none";
+        return;
+      }
+      const payout = stake / pmSlip.price;  // si YES wins, chaque share vaut 1€
+      const profit = payout - stake;
+      payoutEl.textContent = SF.fmt2(payout) + " €";
+      profitEl.textContent = "+" + SF.fmt2(profit) + " €";
+      // Warning si dépassement de la mise max autorisée par le palier
+      const acc = SF.predictionsAccount();
+      if (acc && acc.tier && acc.tier.maxStakePct) {
+        const maxStake = acc.capital * acc.tier.maxStakePct / 100;
+        if (warnEl) {
+          if (stake > maxStake) {
+            warnEl.style.display = "block";
+            warnEl.textContent = "⚠ Mise > exposition max (" + acc.tier.maxStakePct + "% = " + SF.fmt(maxStake) + ")";
+          } else if (acc.balance && stake > acc.balance) {
+            warnEl.style.display = "block";
+            warnEl.textContent = "⚠ Solde insuffisant (disponible : " + SF.fmt2(acc.balance) + ")";
+          } else {
+            warnEl.style.display = "none";
+          }
+        }
+      }
+    };
 
     window.pmPickSide = (id, side) => {
       if (!pmMarkets || !pmMarkets.length) return;
