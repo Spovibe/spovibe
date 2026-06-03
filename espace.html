@@ -749,7 +749,7 @@
         ${catStats.filter(c => c.count > 0).map(c => `<button class="pm-cat ${c.slug === pmCategory ? 'active' : ''}" onclick="pmSetCat('${c.slug}')">${SF.escapeHtml(c.label)} (${c.count})</button>`).join("")}
       </div>
       <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-        <input class="input" style="flex:1;min-width:200px;" placeholder="Rechercher un marché…" value="${SF.escapeHtml(pmSearch)}" oninput="pmSetSearch(this.value)">
+        <input class="input" id="pmSearchInput" style="flex:1;min-width:200px;" placeholder="Rechercher un marché…" value="${SF.escapeHtml(pmSearch)}" oninput="pmSetSearch(this.value)">
         <select class="input" style="flex:0 0 200px;" onchange="pmSetSort(this.value)">
           <option value="endDate" ${pmSort === 'endDate' ? 'selected' : ''}>Fin proche ↑</option>
           <option value="volume24hr" ${pmSort === 'volume24hr' ? 'selected' : ''}>Volume 24 h ↓</option>
@@ -1417,7 +1417,25 @@
       if (cat === "crypto") startCryptoAutoRefresh(); else stopCryptoAutoRefresh();
       render();
     };
-    window.pmSetSearch = q => { pmSearch = q; render(); };
+    // Debounce + restauration du focus pour la recherche : sans ça, render() détruit
+    // l'input à chaque keystroke et le clavier mobile se referme.
+    let _pmSearchDebounce = null;
+    window.pmSetSearch = q => {
+      pmSearch = q;
+      if (_pmSearchDebounce) clearTimeout(_pmSearchDebounce);
+      _pmSearchDebounce = setTimeout(() => {
+        const cursorPos = q.length;
+        render();
+        // Restore focus + position du curseur après le rebuild du DOM
+        requestAnimationFrame(() => {
+          const el = document.getElementById("pmSearchInput");
+          if (el) {
+            try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+            try { el.setSelectionRange(cursorPos, cursorPos); } catch (e) {}
+          }
+        });
+      }, 250);  // 250ms de debounce : on attend que l'user fasse une pause
+    };
     window.pmSetSort = s => { pmSort = s; render(); };
     window.pmRefresh = () => { pmMarkets = null; pmError = null; SpovibePolymarket.clearCache(); loadPolymarket(true); };
     let betResult = "win";
