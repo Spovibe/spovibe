@@ -601,8 +601,17 @@
     function stopCryptoAutoRefresh() {
       if (pmAutoRefreshTimer) { clearInterval(pmAutoRefreshTimer); pmAutoRefreshTimer = null; }
     }
-    // Stop quand l'user navigue ailleurs ou ferme la page
-    window.addEventListener("hashchange", () => { if (current() !== "predictions") stopCryptoAutoRefresh(); });
+    // Stop quand l'user navigue ailleurs ou ferme la page.
+    // ET : nettoie la modale buy slip orpheline si l'user quitte la vue prédictions
+    // sans la fermer manuellement (sinon le backdrop reste z-index:999 et bloque
+    // tous les clics du sidebar).
+    window.addEventListener("hashchange", () => {
+      if (current() !== "predictions") {
+        stopCryptoAutoRefresh();
+        if (pmSlip) { pmSlip = null; }
+        if (typeof pmHideModal === "function") pmHideModal();
+      }
+    });
     window.addEventListener("beforeunload", stopCryptoAutoRefresh);
     async function loadPolymarket(force) {
       if (pmLoading) return;

@@ -403,8 +403,13 @@
       status: "open",
     }).select().single();
     if (error) return { error: error.message };
-    // Débite immédiatement le compte (la mise est verrouillée)
-    acc.balance = Math.round((acc.balance - stake) * 100) / 100;
+    // NOUVEAU MODÈLE : on ne touche PAS au balance à l'ouverture d'une position.
+    // Seul le settlement (won/lost/cancelled) modifie le balance :
+    //   - lost      → balance -= stake
+    //   - won       → balance += profit (= shares - stake)
+    //   - cancelled → balance += 0 (la mise n'a jamais été débitée)
+    // Le stake est juste "verrouillé" dans acc.pending pour le calcul de
+    // "Solde disponible" (= balance - somme des pending stakes).
     acc.pending = acc.pending || [];
     acc.pending.push({ kind: "polymarket", positionId: data.id, marketId: market.id, question: market.question, side, stake, price, at: Date.now() });
     global.SF.saveAccount(acc);
@@ -439,14 +444,19 @@
         await c.from("predictions_positions").update({
           status, resolved_outcome: res.winner, payout, settled_at: new Date().toISOString(),
         }).eq("id", pos.id);
-        // Mise à jour du compte : crédit + clear pending (peu importe le statut)
+        // NOUVEAU MODÈLE : le balance n'a pas été touché à l'ouverture.
+        // On l'ajuste maintenant selon le résultat :
         const acc = global.SF.predictionsAccount();
         if (acc) {
-          if (payout > 0) {
-            acc.balance = Math.round((acc.balance + payout) * 100) / 100;
+          const stake = Number(pos.stake);
+          if (status === "won") {
+            const profit = Number(pos.shares) - stake;  // gain net
+            acc.balance = Math.round((acc.balance + profit) * 100) / 100;
             acc.peak = Math.max(acc.peak || acc.capital, acc.balance);
+          } else if (status === "lost") {
+            acc.balance = Math.round((acc.balance - stake) * 100) / 100;
           }
-          // Vide la position du pending qu'elle soit gagnée OU perdue OU annulée
+          // cancelled (50-50) → balance inchangé (la mise n'a jamais été débitée)
           acc.pending = (acc.pending || []).filter(p => p.positionId !== pos.id);
           global.SF.saveAccount(acc);
         }
