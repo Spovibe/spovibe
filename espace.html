@@ -610,10 +610,16 @@
       if (isActive && pmSlip) {
         const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100;
         const sideClass = pmSlip.side === "YES" ? "yes" : "no";
+        // Récupère le marché complet pour son endDate
+        const slipMarket = pmMarkets ? pmMarkets.find(x => x.id === pmSlip.marketId) : null;
+        const deadlineLine = slipMarket && slipMarket.endDate
+          ? `<div class="muted" style="font-size:0.8rem;margin:6px 0 10px;background:rgba(124,107,246,0.06);border-radius:8px;padding:8px 12px;">⏰ <b style="color:var(--text)">Résolution</b> : ${fmtEndFull(slipMarket.endDate)}</div>`
+          : "";
         slipHtml = `<div class="pm-slip">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ta position</b><button class="btn btn-ghost btn-sm" onclick="pmClear()">Annuler</button></div>
           <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
           <div class="pm-slip-side ${sideClass}">${SF.escapeHtml(pmSlip.label || pmSlip.side)} · ${Math.round(pmSlip.price * 100)}¢</div>
+          ${deadlineLine}
           <div class="alert error" id="pmAlert"></div>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
             <div class="field" style="margin:0;flex:1;min-width:160px;"><label>Mise (€) · max ${SF.fmt(maxStake)}</label><input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}"></div>
@@ -672,6 +678,7 @@
                 </div>
                 <b style="display:block;line-height:1.4;">${SF.escapeHtml(p.market_question || "Marché")}</b>
                 <div class="muted" style="font-size:0.82rem;margin-top:2px;">Pari sur <b style="color:var(--text);">${SF.escapeHtml(sideLabel)}</b> à ${pricePct}¢ · ${SF.escapeHtml(p.category || "Autres")}</div>
+                ${p.end_date ? `<div class="muted" style="font-size:0.78rem;margin-top:3px;">⏰ Résolution : ${fmtEndFull(p.end_date)}</div>` : ""}
                 ${p.resolved_outcome ? `<div class="muted" style="font-size:0.78rem;margin-top:3px;">Résultat : <b style="color:var(--text);">${SF.escapeHtml(p.resolved_outcome)}</b></div>` : ""}
               </div>
               <div style="text-align:right;flex:0 0 auto;margin-left:12px;">${pnl}</div>
@@ -698,6 +705,17 @@
 
       // Auto-refresh 30s pour la catégorie Crypto (marchés live 5min)
       if (pmCategory === "crypto" && !pmAutoRefreshTimer) startCryptoAutoRefresh();
+
+      // Banner explicatif timezone (affiché 1 seule fois, peut être dismissé)
+      const tzBanner = localStorage.getItem("sf_pm_tz_dismissed") === "1" ? "" : `
+        <div style="background:rgba(124,107,246,0.08);border:1px solid rgba(124,107,246,0.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:start;gap:12px;font-size:0.86rem;line-height:1.5;">
+          <span style="font-size:1.1rem;line-height:1.4;">⏰</span>
+          <div style="flex:1;">
+            <b style="color:var(--text);">Important — fuseau horaire Polymarket</b><br>
+            Tous les marchés Polymarket résolvent en <b>US Eastern Time (ET)</b>. Pour t'éviter les pièges, on affiche aussi l'heure française. Ex : "23:59 ET le 2 juin" = "05:59 le 3 juin France" (été).
+          </div>
+          <button class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:0.74rem;flex:0 0 auto;" onclick="localStorage.setItem('sf_pm_tz_dismissed','1');render()">Compris</button>
+        </div>`;
 
       // Catégories Spovibe avec counts
       const catStats = SpovibePolymarket.categoryStats(pmMarkets);
@@ -736,7 +754,28 @@
       filtered = filtered.slice(0, 60);  // cap d'affichage
 
       const fmtVol = v => v >= 1e6 ? (v / 1e6).toFixed(1) + " M$" : v >= 1e3 ? (v / 1e3).toFixed(0) + " k$" : Math.round(v) + " $";
-      const fmtEnd = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+      // Polymarket utilise l'heure US Eastern Time (ET) pour la résolution.
+      // On affiche ET en référence + l'équivalent heure française pour éviter les pièges.
+      const fmtEnd = d => {
+        if (!d) return "";
+        const date = new Date(d); if (isNaN(date.getTime())) return "";
+        const hoursLeft = (date.getTime() - Date.now()) / 3600000;
+        // Format court (date seule) si > 48h, format détaillé (date + heure) si proche
+        if (hoursLeft > 48) {
+          return date.toLocaleDateString("fr-FR", { timeZone: "America/New_York", day: "numeric", month: "short" }) + " ET";
+        }
+        const etTxt = date.toLocaleString("fr-FR", { timeZone: "America/New_York", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        const frTxt = date.toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        return `${etTxt} ET / ${frTxt} FR`;
+      };
+      // Version détaillée toujours avec les 2 fuseaux (utilisée dans buy slip + historique)
+      const fmtEndFull = d => {
+        if (!d) return "";
+        const date = new Date(d); if (isNaN(date.getTime())) return "";
+        const etTxt = date.toLocaleString("fr-FR", { timeZone: "America/New_York", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        const frTxt = date.toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        return `${etTxt} ET (= ${frTxt} FR)`;
+      };
       // En mode locked, les boutons YES/NO renvoient à l'achat de challenge
       const onYes = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','YES')`;
       const onNo  = m => locked ? `location.href='challenges.html?v=predictions'` : `pmPickSide('${m.id}','NO')`;
@@ -760,7 +799,7 @@
         ? `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Marchés en direct depuis <b style="color:var(--text)">Polymarket</b>. <a href="challenges.html?v=predictions" style="color:var(--orange);font-weight:700;">Lance ton challenge</a> pour trader avec une bankroll jusqu'à 100 000 €.</p>`
         : `<p class="muted" style="font-size:0.84rem;margin-top:14px;">Données en direct depuis <b style="color:var(--text)">Polymarket</b> (Gamma API publique). Tes positions sont en monnaie virtuelle et impactent la bankroll de ton challenge selon les mêmes règles que les paris sportifs.</p>`;
 
-      return header + stats + info + slipHtml + pendHtml + historyHtml + catsHtml + `<div class="pm-grid">${cards || '<p class="muted">Aucun marché dans cette catégorie.</p>'}</div>` + footNote;
+      return header + stats + info + tzBanner + slipHtml + pendHtml + historyHtml + catsHtml + `<div class="pm-grid">${cards || '<p class="muted">Aucun marché dans cette catégorie.</p>'}</div>` + footNote;
     }
 
     /* ---------- Arena (univers complet) ---------- */
