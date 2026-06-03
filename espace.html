@@ -457,8 +457,66 @@
 
         <div class="card" style="margin-top:22px;">
           <h3 style="margin-bottom:8px;">Historique ${vertLabel(v)}</h3>
-          ${acc.bets.length === 0 ? '<div class="empty">Aucune activité pour le moment.</div>' : `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Événement</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th><th>Solde</th></tr></thead><tbody>${acc.bets.map(b => `<tr><td class="muted">${SF.fmtDate(b.date)}</td><td>${SF.escapeHtml(b.event)}</td><td>${SF.fmt2(b.stake)}</td><td>${b.odds.toFixed(2)}</td><td>${b.result === "win" ? '<span class="pos">Gagné</span>' : '<span class="neg">Perdu</span>'}</td><td class="${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</td><td>${SF.fmt2(b.balanceAfter)}</td></tr>`).join("")}</tbody></table></div>`}
+          ${renderHistoryForVertical(v, acc)}
         </div>`;
+    }
+
+    // Rend l'historique selon le vertical : acc.bets pour Sports, predictions_positions pour Prédictions
+    function renderHistoryForVertical(v, acc) {
+      if (v === "sports") {
+        if (acc.bets.length === 0) return '<div class="empty">Aucune activité pour le moment.</div>';
+        return `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Événement</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th><th>Solde</th></tr></thead><tbody>${acc.bets.map(b => `<tr><td class="muted">${SF.fmtDate(b.date)}</td><td>${SF.escapeHtml(b.event)}</td><td>${SF.fmt2(b.stake)}</td><td>${b.odds.toFixed(2)}</td><td>${b.result === "win" ? '<span class="pos">Gagné</span>' : '<span class="neg">Perdu</span>'}</td><td class="${b.pnl >= 0 ? 'pos' : 'neg'}">${b.pnl >= 0 ? '+' : ''}${SF.fmt2(b.pnl)}</td><td>${SF.fmt2(b.balanceAfter)}</td></tr>`).join("")}</tbody></table></div>`;
+      }
+      // Prédictions : on tire depuis le cache pmPositions (chargé async).
+      // Si pas encore chargé, on lance le chargement et on affiche un loader.
+      if (pmPositions === null && !pmPositionsLoading) {
+        loadPositions();
+        return '<div class="empty">Chargement de l\'historique…</div>';
+      }
+      if (pmPositionsLoading && !pmPositions) {
+        return '<div class="empty">Chargement de l\'historique…</div>';
+      }
+      const positions = pmPositions || [];
+      if (positions.length === 0) return '<div class="empty">Aucune activité pour le moment.</div>';
+      // Tri par date décroissante (plus récente en premier)
+      const sorted = positions.slice().sort((a, b) => {
+        const ta = a.opened_at ? new Date(a.opened_at).getTime() : 0;
+        const tb = b.opened_at ? new Date(b.opened_at).getTime() : 0;
+        return tb - ta;
+      });
+      const rows = sorted.map(p => {
+        const dt = p.opened_at ? new Date(p.opened_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+        const pricePct = Math.round(Number(p.price_at_entry) * 100);
+        const sideLabel = p.side || "Yes";
+        let resultCell = "—", pnlCell = "—", pnlClass = "muted";
+        if (p.status === "open") {
+          const endMs = p.end_date ? new Date(p.end_date).getTime() : null;
+          const isExpired = endMs && endMs < Date.now();
+          resultCell = isExpired
+            ? '<span style="color:#ea580c;font-weight:700;">Résolution en attente</span>'
+            : '<span style="color:var(--lavande);font-weight:700;">En cours</span>';
+          pnlCell = "—"; pnlClass = "muted";
+        } else if (p.status === "won") {
+          const profit = Number(p.payout) - Number(p.stake);
+          resultCell = '<span class="pos">Gagné</span>';
+          pnlCell = "+" + SF.fmt2(profit); pnlClass = "pos";
+        } else if (p.status === "lost") {
+          resultCell = '<span class="neg">Perdu</span>';
+          pnlCell = "−" + SF.fmt2(p.stake); pnlClass = "neg";
+        } else if (p.status === "cancelled") {
+          resultCell = '<span class="muted">Annulé (50-50)</span>';
+          pnlCell = "0,00"; pnlClass = "muted";
+        }
+        return `<tr>
+          <td class="muted">${dt}</td>
+          <td>${SF.escapeHtml(p.market_question || "Marché")}<div class="muted" style="font-size:0.74rem;">${SF.escapeHtml(sideLabel)} @ ${pricePct}¢</div></td>
+          <td>${SF.fmt2(p.stake)}</td>
+          <td>×${(1 / Number(p.price_at_entry)).toFixed(2)}</td>
+          <td>${resultCell}</td>
+          <td class="${pnlClass}">${pnlCell}</td>
+        </tr>`;
+      }).join("");
+      return `<div style="overflow-x:auto;"><table class="history"><thead><tr><th>Date</th><th>Marché</th><th>Mise</th><th>Cote</th><th>Résultat</th><th>P&amp;L</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
 
     function viewChallenges() {
@@ -1236,12 +1294,19 @@
         return `<button class="bo-link ${id === cur ? 'active' : ''}" onclick="go('${id}')">${icon}<span>${label}</span></button>`;
       }).join("");
     }
+    let _prevView = null;
     function render() {
       const cur = current(), tt = TITLES[cur];
       const head = cur === "overview" ? "" : `<div class="dash-h"><div><h1>${tt[0]}</h1><div class="sub">${tt[1]}</div></div><div class="actions"><button class="pill-sel" onclick="render()">Actualiser</button></div></div>`;
       document.getElementById("view").innerHTML = head + VIEWS[cur]();
       renderSidebar();
-      window.scrollTo({ top: 0, behavior: "instant" });
+      // Scroll au top UNIQUEMENT au changement de vue (navigation).
+      // Sinon, après placer un pari ou n'importe quelle action, on resterait
+      // bloqué en haut et il faudrait re-scroller pour voir les marchés.
+      if (cur !== _prevView) {
+        window.scrollTo({ top: 0, behavior: "instant" });
+        _prevView = cur;
+      }
     }
     window.go = go;
     window.addEventListener("hashchange", render);
