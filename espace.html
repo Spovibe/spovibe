@@ -416,7 +416,7 @@
               <h3 style="margin-bottom:10px;">Conditions de réussite</h3>
               <p class="muted" style="font-size:0.82rem;margin-bottom:14px;">Toutes les conditions doivent être remplies AVANT la date limite. Le drawdown ne doit jamais être dépassé, à aucun moment.</p>
               <div class="rule-row"><span class="muted">Objectif de profit</span><span><b style="margin-right:8px;">+${t.target}% en ${t.timeLimitDays} j</b>${cMark(s.profit >= s.targetProfit)}</span></div>
-              <div class="rule-row"><span class="muted">Drawdown total max</span><span><b style="margin-right:8px;">${t.maxDD}% (plancher ${SF.fmt(s.ddFloor)})</b>${cMark(ddPct <= t.maxDD && acc.status !== 'failed')}</span></div>
+              <div class="rule-row"><span class="muted">Drawdown total max</span><span><b style="margin-right:8px;">${t.maxDD}%</b>${cMark(ddPct <= t.maxDD && acc.status !== 'failed')}</span></div>
               <div class="rule-row"><span class="muted">Drawdown journalier max</span><b>${t.maxDailyLoss}%</b></div>
               <div class="rule-row"><span class="muted">${v === "predictions" ? "Exposition max / marché" : "Mise par pari"}</span><b>${t.minStakePct ? t.minStakePct + "% – " : ""}${t.maxStakePct}% du capital</b></div>
               <div class="rule-row"><span class="muted">${unit === "positions" ? "Positions valides" : "Paris valides"}</span><span><b style="margin-right:8px;">${s.bets} / ${t.minBets}</b>${cMark(s.bets >= t.minBets)}</span></div>
