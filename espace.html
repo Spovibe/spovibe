@@ -1263,22 +1263,20 @@
       const label = side === "YES" ? (m.yesLabel || "Oui") : (m.noLabel || "Non");
       pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question, label };
       render();
-      // Mobile UX : le slip se rend en haut de la page, mais l'user est souvent scrollé
-      // en bas sur la liste des marchés. On le ramène à la vue du slip + on met le focus
-      // sur le champ mise pour qu'il puisse taper son montant directement au clavier.
+      // Active la classe body pour réserver l'espace en bas (mobile : le slip est
+      // un bottom sheet qui flotte par dessus). En desktop, ce CSS est noop.
+      document.body.classList.add("pm-slip-open");
+      // Focus le champ mise pour ouvrir directement le clavier numérique
       setTimeout(() => {
-        const slipEl = document.getElementById("pmSlipBox");
-        if (slipEl) {
-          slipEl.scrollIntoView({ behavior: "smooth", block: "center" });
-          // Focus le champ mise après le scroll (delay supplémentaire pour finir l'anim)
-          setTimeout(() => {
-            const stakeInput = document.getElementById("pmStake");
-            if (stakeInput) { try { stakeInput.focus({ preventScroll: true }); } catch (e) { stakeInput.focus(); } }
-          }, 350);
-        }
-      }, 50);
+        const stakeInput = document.getElementById("pmStake");
+        if (stakeInput) { try { stakeInput.focus({ preventScroll: true }); } catch (e) { stakeInput.focus(); } }
+      }, 250);
     };
-    window.pmClear = () => { pmSlip = null; render(); };
+    window.pmClear = () => {
+      pmSlip = null;
+      document.body.classList.remove("pm-slip-open");
+      render();
+    };
     window.pmConfirm = async () => {
       const al = document.getElementById("pmAlert"); al.classList.remove("show");
       const stake = Number(document.getElementById("pmStake").value);
@@ -1289,7 +1287,9 @@
         stake,
       });
       if (r.error) { al.textContent = r.error; al.classList.add("show"); return; }
-      pmSlip = null; render();
+      pmSlip = null;
+      document.body.classList.remove("pm-slip-open");
+      render();
     };
     window.pmSetCat = cat => {
       pmCategory = cat;

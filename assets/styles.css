@@ -489,6 +489,47 @@ h4 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .pm-slip .pm-slip-side.yes { color: var(--green); }
 .pm-slip .pm-slip-side.no { color: var(--red); }
 
+/* Mobile : le buy slip devient un bottom sheet qui colle en bas de l'écran.
+   Impossible à manquer + permet à l'user de scroller la liste des marchés
+   en gardant son intention visible. */
+@media (max-width: 768px) {
+  #pmSlipBox {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 32px rgba(15, 14, 26, 0.18), 0 -2px 8px rgba(15, 14, 26, 0.08);
+    z-index: 1000;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding: 16px 18px 22px;
+    /* iOS safe area pour les iPhone à encoche */
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+    animation: pmSlipSlideUp 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* Petit drag-handle visuel en haut du sheet */
+  #pmSlipBox::before {
+    content: "";
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: var(--border-strong, #d4cfeb);
+    border-radius: 2px;
+    margin: 0 auto 14px;
+  }
+  @keyframes pmSlipSlideUp {
+    from { transform: translateY(100%); opacity: 0.5; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  /* Espace en bas de la page pour ne pas que le slip recouvre la liste */
+  body.pm-slip-open { padding-bottom: 220px; }
+}
+
 /* ============================================================
    Certificats : grille de cartes (Mes certificats) + modal
    ============================================================ */
