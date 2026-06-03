@@ -81,7 +81,7 @@
       overview: ["Vue d'ensemble", "Tout ton espace Spovibe en un coup d'œil"],
       challenges: ["Mes challenges", "Suis ton évaluation et ton compte financé"],
       betting: ["Paris sportifs", "Place tes paris avec la bankroll de ton challenge"],
-      predictions: ["Marchés prédictifs", "Achète des positions YES/NO sur les grands marchés Polymarket"],
+      predictions: ["Marchés prédictifs", "Achète des positions sur les grands marchés Polymarket"],
       arena: ["Arena", "Ton classement de poule et ta division"],
       certificates: ["Mes certificats", "Téléchargez vos preuves de réussite et de paiement"],
       rewards: ["Récompenses & codes", "Crédits, codes promo et parrainage"],
@@ -367,7 +367,7 @@
       let actionCard = "";
       if (acc.status === "passed") actionCard = `<div class="card"><h3 style="margin-bottom:8px;">Activer le compte financé</h3><p class="muted" style="font-size:0.92rem;margin-bottom:16px;">Active ton capital de ${SF.fmt(acc.capital)} (partage ${t.split}%).</p><button class="btn btn-primary btn-block btn-lg" onclick="doClaim('${v}')">Activer mon compte financé</button>${certBtn}</div>`;
       else if (acc.status === "failed") actionCard = `<div class="card center"><h3 style="margin-bottom:10px;">Relancer</h3><a class="btn btn-primary btn-block btn-lg" href="challenges.html?v=${v}">Nouveau challenge ${vertLabel(v)}</a></div>`;
-      else { const nPend = (acc.pending || []).length; actionCard = `<div class="card"><h3 style="margin-bottom:6px;">${v === "predictions" ? "Trader des marchés" : "Parier"}</h3><p class="muted" style="font-size:0.9rem;margin-bottom:16px;">${v === "predictions" ? "Achète des positions YES/NO sur les grands marchés Polymarket." : "Place tes paris sur les matchs à venir."}${nPend ? ` Tu as <b style="color:var(--orange)">${nPend} ${unit === "positions" ? "position(s)" : "pari(s)"} en cours</b>.` : ''}</p><button class="btn btn-primary btn-block btn-lg" onclick="go('${vertGoTo(v)}')">Aller à ${vertLabel(v)}</button></div>`; }
+      else { const nPend = (acc.pending || []).length; actionCard = `<div class="card"><h3 style="margin-bottom:6px;">${v === "predictions" ? "Trader des marchés" : "Parier"}</h3><p class="muted" style="font-size:0.9rem;margin-bottom:16px;">${v === "predictions" ? "Achète des positions sur les grands marchés Polymarket." : "Place tes paris sur les matchs à venir."}${nPend ? ` Tu as <b style="color:var(--orange)">${nPend} ${unit === "positions" ? "position(s)" : "pari(s)"} en cours</b>.` : ''}</p><button class="btn btn-primary btn-block btn-lg" onclick="go('${vertGoTo(v)}')">Aller à ${vertLabel(v)}</button></div>`; }
       let payoutCard = "";
       if (acc.phase === "funded") {
         const totalWithdrawn = acc.withdrawn || 0;
