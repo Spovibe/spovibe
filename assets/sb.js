@@ -359,14 +359,16 @@
   const _initPromise = init();
   global.SpovibeAuth.ready = function ready() { return _initPromise; };
 
-  // Sync entre onglets : si l'utilisateur se déconnecte ailleurs, on suit
+  // Sync entre onglets : si l'utilisateur se déconnecte ailleurs, on suit.
+  // Et surtout : intercepte le SIGNED_IN après confirmation e-mail pour rediriger
+  // vers /espace.html?activate=<tierId> si un challenge est en attente (cas du
+  // signup unifié depuis /challenges.html).
   setTimeout(() => {
     try {
       client().auth.onAuthStateChange(async (event) => {
         if (event === "SIGNED_OUT") {
           setCachedUser(null);
           resetHydrate();
-          // Nettoie le cache local des données utilisateur précédent
           try {
             const all = JSON.parse(localStorage.getItem("sf_accounts") || "{}");
             localStorage.setItem("sf_accounts", JSON.stringify(all));
@@ -376,6 +378,29 @@
           await refreshFromDb();
           resetHydrate();
           await ensureHydrated();
+          // Rattrapage redirect : si un tier est en attente d'activation et qu'on
+          // n'est PAS déjà sur espace.html (cas où Supabase a fallback sur Site URL
+          // ou login.html), force la redirection vers le back office.
+          if (event === "SIGNED_IN") {
+            try {
+              const raw = localStorage.getItem("sf_pending_tier");
+              if (raw) {
+                const pending = JSON.parse(raw);
+                // Validité 1h max
+                if (pending && pending.tier && (Date.now() - (pending.at || 0)) < 3600000) {
+                  const path = location.pathname || "/";
+                  const onEspace = /\/espace\.html$/i.test(path);
+                  if (!onEspace) {
+                    location.href = "/espace.html?activate=" + encodeURIComponent(pending.tier);
+                    return;
+                  }
+                } else {
+                  // Expiré, on nettoie
+                  localStorage.removeItem("sf_pending_tier");
+                }
+              }
+            } catch (e) { console.warn("pending tier redirect error:", e); }
+          }
         }
       });
     } catch (e) {}

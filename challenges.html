@@ -184,18 +184,29 @@
         const password = document.getElementById("suPassword").value;
         btn.disabled = true; btn.textContent = "Création du compte…";
         try {
-          // On dit à Supabase de rediriger vers /espace.html?activate=<tierId> après confirmation
+          // Stocke le tierId en localStorage AVANT le signup. Comme ça même si Supabase
+          // ignore notre redirectTo (config URL allowlist trop stricte) et renvoie sur la
+          // home page, on rattrape le coup via SpovibeAuth onAuthStateChange (sb.js).
+          localStorage.setItem("sf_pending_tier", JSON.stringify({ tier: selected.id, at: Date.now() }));
+          // On dit AUSSI à Supabase de rediriger vers /espace.html?activate=<tierId> (cas idéal)
           const redirectTo = `${location.origin}/espace.html?activate=${encodeURIComponent(selected.id)}`;
           const r = await SF.signup(name, email, password, { redirectTo });
-          if (r.error) { alert.textContent = r.error; alert.classList.add("show"); return; }
+          if (r.error) {
+            // Nettoie le pendingTier si signup foire (mauvais e-mail, etc.)
+            localStorage.removeItem("sf_pending_tier");
+            alert.textContent = r.error; alert.classList.add("show"); return;
+          }
           if (r.needsConfirmation) {
-            // L'achat se fera après confirmation e-mail (handled by espace.html?activate=...)
+            // L'achat se fera après confirmation e-mail.
+            // Le pendingTier reste en localStorage, sera consommé après la confirmation.
             okAlert.innerHTML = `Compte créé ! <b>Vérifie ta boîte mail à ${email}</b> pour confirmer ton inscription. Le lien de confirmation activera automatiquement ton challenge ${selected.name}.`;
             okAlert.classList.add("show");
             okAlert.scrollIntoView({ behavior: "smooth", block: "center" });
             return;
           }
           // Pas de confirmation requise = session déjà active = on enchaîne sur startChallenge
+          // Le pendingTier n'est plus utile, on le nettoie.
+          localStorage.removeItem("sf_pending_tier");
           btn.textContent = "Activation du challenge…";
           await SF.dataReady();
           const res = await SF.startChallenge(selected.id);
