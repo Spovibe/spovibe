@@ -615,8 +615,13 @@
         const deadlineLine = slipMarket && slipMarket.endDate
           ? `<div class="muted" style="font-size:0.8rem;margin:6px 0 10px;background:rgba(124,107,246,0.06);border-radius:8px;padding:8px 12px;">⏰ <b style="color:var(--text)">Résolution</b> : ${fmtEndFull(slipMarket.endDate)}</div>`
           : "";
-        slipHtml = `<div class="pm-slip" id="pmSlipBox">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b>Ta position</b><button class="btn btn-ghost btn-sm" onclick="pmClear()">Annuler</button></div>
+        // Le slip est wrapped dans un backdrop modal (clic en dehors = fermer)
+        slipHtml = `<div class="pm-modal-backdrop" onclick="if(event.target===this)pmClear()">
+        <div class="pm-slip" id="pmSlipBox">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <b style="font-size:1.05rem;">Placer une position</b>
+            <button class="btn btn-ghost btn-sm" onclick="pmClear()" style="padding:6px 12px;font-size:0.84rem;">✕ Fermer</button>
+          </div>
           <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
           <div class="pm-slip-side ${sideClass}">${SF.escapeHtml(pmSlip.label || pmSlip.side)} · ${Math.round(pmSlip.price * 100)}¢</div>
           ${deadlineLine}
@@ -626,7 +631,7 @@
             <button class="btn btn-primary" onclick="pmConfirm()">Placer la position</button>
           </div>
           <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${SF.escapeHtml(pmSlip.label || pmSlip.side)}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
-        </div>`;
+        </div></div>`;
       }
 
       let pendHtml = "";
