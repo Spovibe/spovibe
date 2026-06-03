@@ -487,6 +487,16 @@
     }
 
     /* ---------- Marchés prédictifs (Polymarket) ---------- */
+    // Helper global de formatage date avec double timezone (ET + FR), utilisé
+    // par la vue Marchés prédictifs ET par la modale buy slip (créée sur body).
+    function fmtEndFullGlobal(d) {
+      if (!d) return "";
+      const date = new Date(d); if (isNaN(date.getTime())) return "";
+      const etTxt = date.toLocaleString("fr-FR", { timeZone: "America/New_York", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const frTxt = date.toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      return `${etTxt} ET (= ${frTxt} FR)`;
+    }
+
     let pmMarkets = null, pmLoading = false, pmError = null, pmCategory = "all", pmSlip = null, pmSearch = "", pmSort = "endDate";
     let pmAutoRefreshTimer = null;  // setInterval ID quand on est sur Crypto (live 5min markets)
     let pmLastRefreshAt = null;     // timestamp du dernier auto-refresh pour le badge UI
@@ -606,16 +616,18 @@
       if (pmLoading && !pmMarkets) info = `<div class="pm-loading">Chargement des marchés depuis Polymarket…</div>`;
       if (pmError) info = `<div class="pm-warn">⚠ API Polymarket inaccessible (${SF.escapeHtml(pmError)}). <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:4px 10px;" onclick="pmRefresh()">Réessayer</button></div>`;
 
+      // Le buy slip n'est plus rendu dans la vue — il est créé directement sur
+      // <body> via pmShowModal() (cf bas du script) pour échapper aux CSS parents.
+      // Mais on garde un emplacement vide pour ne pas casser la concaténation.
       let slipHtml = "";
-      if (isActive && pmSlip) {
+      if (false && isActive && pmSlip) {
+        // CODE OBSOLÈTE — gardé en commentaire pour référence, jamais exécuté
         const avail = SF.availableBalance(acc), maxStake = acc.capital * acc.tier.maxStakePct / 100;
         const sideClass = pmSlip.side === "YES" ? "yes" : "no";
-        // Récupère le marché complet pour son endDate
         const slipMarket = pmMarkets ? pmMarkets.find(x => x.id === pmSlip.marketId) : null;
         const deadlineLine = slipMarket && slipMarket.endDate
           ? `<div class="muted" style="font-size:0.8rem;margin:6px 0 10px;background:rgba(124,107,246,0.06);border-radius:8px;padding:8px 12px;">⏰ <b style="color:var(--text)">Résolution</b> : ${fmtEndFull(slipMarket.endDate)}</div>`
           : "";
-        // Le slip est wrapped dans un backdrop modal (clic en dehors = fermer)
         slipHtml = `<div class="pm-modal-backdrop" onclick="if(event.target===this)pmClear()">
         <div class="pm-slip" id="pmSlipBox">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -1263,24 +1275,72 @@
       alert(`${r.results.length} ${unit} réglé(s) : ${won} gagné(s). Résultat net : ${(net >= 0 ? '+' : '')}${SF.fmt2(net)}.`); render();
     };
     // Marchés prédictifs
-    window.pmPickSide = (id, side) => {
-      const m = pmMarkets.find(x => x.id === id); if (!m) return;
-      const label = side === "YES" ? (m.yesLabel || "Oui") : (m.noLabel || "Non");
-      pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question, label };
-      render();
-      // Active la classe body pour réserver l'espace en bas (mobile : le slip est
-      // un bottom sheet qui flotte par dessus). En desktop, ce CSS est noop.
+    // Construit et insère la modale directement sur <body>. Comme ça aucun
+    // CSS parent (transform, overflow, contain…) ne peut casser le position:fixed.
+    function pmShowModal() {
+      if (!pmSlip || !pmMarkets) return;
+      const acc = SF.predictionsAccount();
+      if (!acc || (acc.status !== "active" && acc.status !== "funded")) return;
+      const market = pmMarkets.find(x => x.id === pmSlip.marketId);
+      const maxStake = acc.capital * acc.tier.maxStakePct / 100;
+      const sideClass = pmSlip.side === "YES" ? "yes" : "no";
+      const sideLabel = SF.escapeHtml(pmSlip.label || pmSlip.side);
+      const pricePct = Math.round(pmSlip.price * 100);
+      const deadlineLine = market && market.endDate
+        ? `<div class="muted" style="font-size:0.8rem;margin:6px 0 10px;background:rgba(124,107,246,0.06);border-radius:8px;padding:8px 12px;">⏰ <b style="color:var(--text)">Résolution</b> : ${fmtEndFullGlobal(market.endDate)}</div>`
+        : "";
+      const innerHtml = `
+        <div class="pm-slip" id="pmSlipBox">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <b style="font-size:1.05rem;">Placer une position</b>
+            <button class="btn btn-ghost btn-sm" onclick="pmClear()" style="padding:6px 12px;font-size:0.84rem;">✕ Fermer</button>
+          </div>
+          <div class="pm-slip-q">${SF.escapeHtml(pmSlip.question)}</div>
+          <div class="pm-slip-side ${sideClass}">${sideLabel} · ${pricePct}¢</div>
+          ${deadlineLine}
+          <div class="alert error" id="pmAlert"></div>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="field" style="margin:0;flex:1;min-width:160px;">
+              <label>Mise (€) · max ${SF.fmt(maxStake)}</label>
+              <input class="input" id="pmStake" type="number" min="1" step="1" placeholder="ex. ${Math.round(maxStake)}" autofocus>
+            </div>
+            <button class="btn btn-primary" onclick="pmConfirm()">Placer la position</button>
+          </div>
+          <div class="muted" style="font-size:0.85rem;margin-top:10px;">Si <b style="color:var(--text)">${sideLabel}</b> se réalise, gain = mise × ${(1 / pmSlip.price).toFixed(2)}.</div>
+        </div>`;
+      let modalEl = document.getElementById("pmModalRoot");
+      if (!modalEl) {
+        modalEl = document.createElement("div");
+        modalEl.id = "pmModalRoot";
+        modalEl.className = "pm-modal-backdrop";
+        modalEl.addEventListener("click", (e) => { if (e.target === modalEl) pmClear(); });
+        document.body.appendChild(modalEl);
+      }
+      modalEl.innerHTML = innerHtml;
       document.body.classList.add("pm-slip-open");
-      // Focus le champ mise pour ouvrir directement le clavier numérique
+      // Focus le champ mise pour ouvrir le clavier numérique direct
       setTimeout(() => {
         const stakeInput = document.getElementById("pmStake");
         if (stakeInput) { try { stakeInput.focus({ preventScroll: true }); } catch (e) { stakeInput.focus(); } }
-      }, 250);
+      }, 80);
+    }
+
+    function pmHideModal() {
+      const modalEl = document.getElementById("pmModalRoot");
+      if (modalEl) modalEl.remove();
+      document.body.classList.remove("pm-slip-open");
+    }
+
+    window.pmPickSide = (id, side) => {
+      if (!pmMarkets || !pmMarkets.length) return;
+      const m = pmMarkets.find(x => x.id === id); if (!m) return;
+      const label = side === "YES" ? (m.yesLabel || "Oui") : (m.noLabel || "Non");
+      pmSlip = { marketId: m.id, side, price: side === "YES" ? m.yesPrice : m.noPrice, question: m.question, label };
+      pmShowModal();
     };
     window.pmClear = () => {
       pmSlip = null;
-      document.body.classList.remove("pm-slip-open");
-      render();
+      pmHideModal();
     };
     window.pmConfirm = async () => {
       const al = document.getElementById("pmAlert"); al.classList.remove("show");
@@ -1293,7 +1353,11 @@
       });
       if (r.error) { al.textContent = r.error; al.classList.add("show"); return; }
       pmSlip = null;
-      document.body.classList.remove("pm-slip-open");
+      pmHideModal();
+      // Re-load les positions pour montrer la nouvelle dans l'historique
+      if (window.SpovibePolymarket && SpovibePolymarket.listAllPositions) {
+        try { pmPositions = await SpovibePolymarket.listAllPositions(); } catch (e) {}
+      }
       render();
     };
     window.pmSetCat = cat => {
