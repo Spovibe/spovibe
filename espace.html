@@ -580,7 +580,9 @@
         }
       } catch (e) { console.warn(e); pmPositions = []; }
       pmPositionsLoading = false;
-      if (current() === "predictions") render();
+      // Toujours re-render : on est peut-être sur la vue Prédictions OU sur Mes
+      // challenges (qui affiche aussi l'historique pour le vertical predictions).
+      render();
     }
 
     function startCryptoAutoRefresh() {

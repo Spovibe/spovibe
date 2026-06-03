@@ -649,6 +649,14 @@ body.pm-slip-open { overflow: hidden; }
   .bo-main { padding: 22px 16px 56px; min-width: 0; }
 }
 @media (max-width: 640px) {
+  /* Défense anti-débordement horizontal : empêche tout élément (table, longue
+     question Polymarket, etc.) de faire scroller la page sur la droite. */
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  /* Casser les mots très longs (URL, market questions) qui n'ont pas d'espace */
+  h1, h2, h3, h4, p, td, th { word-break: break-word; overflow-wrap: anywhere; }
+  /* Tableau historique : autoriser le scroll interne et limiter la largeur */
+  .card > div[style*="overflow-x"] { max-width: 100%; }
+  .card > div[style*="overflow-x"] table { max-width: 100%; }
   /* Tout passe en 1 colonne et on resserre */
   .bo-main { padding: 18px 14px 50px; }
   .stat3 { grid-template-columns: 1fr; gap: 12px; }
